@@ -2,3 +2,5 @@ fastapi
 uvicorn
 python-dotenv
 paramiko
+zipfile36
+rarfile

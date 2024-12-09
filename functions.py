@@ -5,6 +5,9 @@ import logging
 from typing import List, Tuple
 import os
 from pathlib import Path
+import zipfile
+import rarfile
+import tarfile
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 _logger = logging.getLogger(__name__)
@@ -183,3 +186,93 @@ def descargar_archivos_sftp(conteo_archivos: ConteoArchivos, host: str, port: in
     _logger.info("Cerrando conexión SFTP")
     sftp.close()
     transport.close()
+    
+
+def descomprimir_zip(file_path: Path, output_dir: Path) -> None:
+    """
+    Descomprime un archivo zip.
+
+    Args:
+        file_path (Path): Ruta del archivo zip.
+        output_dir (Path): Directorio de salida.
+
+    Returns:
+        None
+    """
+    try:
+        with zipfile.ZipFile(file_path, 'r') as zip_ref:
+            zip_ref.extractall(output_dir)
+        _logger.info(f"Archivo ZIP descomprimido: {file_path}")
+    except Exception as e:
+        _logger.error(f"Error al descomprimir el archivo ZIP {file_path}: {e}")
+
+def descomprimir_rar(file_path: Path, output_dir: Path) -> None:
+    """
+    Descomprime un archivo rar.
+
+    Args:
+        file_path (Path): Ruta del archivo rar.
+        output_dir (Path): Directorio de salida.
+
+    Returns:
+        None
+    """
+    try:
+        with rarfile.RarFile(file_path, 'r') as rar_ref:
+            rar_ref.extractall(output_dir)
+        _logger.info(f"Archivo RAR descomprimido: {file_path}")
+    except Exception as e:
+        _logger.error(f"Error al descomprimir el archivo RAR {file_path}: {e}")
+
+def descomprimir_tar_gz(file_path: Path, output_dir: Path) -> None:
+    """
+    Descomprime un archivo tar.gz.
+
+    Args:
+        file_path (Path): Ruta del archivo tar.gz.
+        output_dir (Path): Directorio de salida.
+
+    Returns:
+        None
+    """
+    try:
+        with tarfile.open(file_path, 'r:gz') as tar_ref:
+            tar_ref.extractall(output_dir)
+        _logger.info(f"Archivo TAR.GZ descomprimido: {file_path}")
+    except Exception as e:
+        _logger.error(f"Error al descomprimir el archivo TAR.GZ {file_path}: {e}")
+            
+
+
+def descomprimir_archivos(directorio: str) -> None:
+    """
+    Descomprime todos los archivos .zip, .rar y .tar.gz en el directorio dado.
+
+    Args:
+        directorio (str): Ruta del directorio donde se encuentran los archivos comprimidos.
+
+    Returns:
+        None
+    """
+    dir_path = Path(directorio)
+    _logger.info(f"Iniciando descompresion")
+    # Verificar que el directorio existe
+    if not dir_path.exists() or not dir_path.is_dir():
+        raise FileNotFoundError(f"El directorio {directorio} no existe o no es un directorio válido")
+
+    # Recorrer todos los archivos en el directorio
+    for file_path in dir_path.iterdir(): 
+        if file_path.suffix in ['.zip', '.rar'] or file_path.name.endswith('.tar.gz'): 
+            output_dir = dir_path / file_path.stem # Crear una carpeta con el mismo nombre del archivo (sin la extensión) 
+            output_dir.mkdir(parents=True, exist_ok=True)
+            if file_path.suffix == '.zip':
+                _logger.info(f"Descomprimiendo archivo ZIP: {file_path}")
+                descomprimir_zip(file_path, dir_path)
+            elif file_path.suffix == '.rar':
+                _logger.info(f"Descomprimiendo archivo RAR: {file_path}")
+                descomprimir_rar(file_path, dir_path)
+            elif file_path.name.endswith('.tar.gz') or file_path.suffix in ['.tar.gz', '.tgz']:
+                _logger.info(f"Descomprimiendo archivo TAR.GZ: {file_path}")
+                descomprimir_tar_gz(file_path, dir_path)
+        else:
+            _logger.warning(f"Tipo de archivo no soportado: {file_path}")
