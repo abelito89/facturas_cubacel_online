@@ -2,9 +2,9 @@ import uvicorn
 from fastapi import FastAPI
 import os
 from dotenv import load_dotenv
-from schemas.schemas import ConteoArchivos
-from functions import read_from_sftp, filtrar_facturas_mes_vencido, clear_console
+from functions import read_from_sftp, filtrar_facturas_mes_vencido, clear_console, descargar_archivos_sftp
 import logging
+from pathlib import Path
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -23,13 +23,17 @@ password = os.getenv("PASSWORD")
 @app.get("/decompactar_facturas")
 async def descompactar_facturas(host:str = host, port: int = int(port), username:str = username, password:str = password) -> None:
     clear_console()
-    ConteoArchivos = read_from_sftp(host, port, username, password)
+    conteo_archivos = read_from_sftp(host, port, username, password)
     print()
-    _logger.info(f"Archivos .tar.gz: {ConteoArchivos.tar_gz_files}") 
-    _logger.info(f"Archivos .zip: {ConteoArchivos.zip_files}") 
-    _logger.info(f"Archivos .rar: {ConteoArchivos.rar_files}")
+    _logger.info(f"Archivos .tar.gz: {conteo_archivos.tar_gz_files}") 
+    _logger.info(f"Archivos .zip: {conteo_archivos.zip_files}") 
+    _logger.info(f"Archivos .rar: {conteo_archivos.rar_files}")
     
-    filtrar_facturas_mes_vencido(ConteoArchivos)
+    lista_archivos_copiar = filtrar_facturas_mes_vencido(conteo_archivos)
+    destino_descarga = "archivos_descargados"
+    direccion_destino_descarga = Path.cwd() / destino_descarga
+    direccion_destino_descarga.mkdir(parents=True, exist_ok=True)
+    descargar_archivos_sftp(conteo_archivos, host, port, username, password, lista_archivos_copiar, direccion_destino_descarga)
 
 
 if __name__ == "__main__":

@@ -2,13 +2,12 @@ import paramiko
 from schemas.schemas import ConteoArchivos
 from datetime import datetime
 import logging
-from typing import List
+from typing import List, Tuple
 import os
+from pathlib import Path
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 _logger = logging.getLogger(__name__)
-
-
 
 
 def clear_console() -> None:
@@ -30,31 +29,42 @@ def clear_console() -> None:
     print()
 
 
+import paramiko
+from typing import Tuple
 
-def read_from_sftp(host, port, username, password):
+def cliente_sft(host: str, port: int, username: str, password: str) -> Tuple[paramiko.SFTPClient, paramiko.Transport]:
     """
-        Lee archivos desde un servidor SFTP y cuenta los archivos específicos.
+    Establece una conexión SFTP y retorna el cliente y el transporte.
 
     Args:
-        host (str): Dirección IP o nombre del host SFTP.
+        host (str): Dirección del servidor SFTP.
         port (int): Puerto del servidor SFTP.
-        username (str): Nombre de usuario para conectar al servidor SFTP.
-        password (str): Contraseña para conectar al servidor SFTP.
+        username (str): Nombre de usuario para el acceso SFTP.
+        password (str): Contraseña para el acceso SFTP.
 
     Returns:
-        ConteoArchivos: Objeto conteniendo las listas de archivos .tar.gz, .zip y .rar encontrados.
-
-    Notes:
-        - Este método conecta a un servidor SFTP usando Paramiko.
-        - Lista todos los archivos en el directorio remoto.
-        - Filtra y cuenta los archivos con las extensiones .tar.gz, .zip y .rar.
-        - Cierra automáticamente la conexión SFTP después de completar la operación.
+        Tuple[paramiko.SFTPClient, paramiko.Transport]: Cliente SFTP y transporte SFTP.
     """
-    # Crear el cliente SFTP
     transport = paramiko.Transport((host, port))
     transport.connect(username=username, password=password)
-    
     sftp = paramiko.SFTPClient.from_transport(transport)
+    return sftp, transport
+
+
+def read_from_sftp(host: str, port: int, username: str, password: str) -> ConteoArchivos:
+    """
+    Conecta a un servidor SFTP, lista los archivos y clasifica los archivos por tipo.
+
+    Args:
+        host (str): Dirección del servidor SFTP.
+        port (int): Puerto del servidor SFTP.
+        username (str): Nombre de usuario para el acceso SFTP.
+        password (str): Contraseña para el acceso SFTP.
+
+    Returns:
+        ConteoArchivos: Objeto que contiene listas de archivos .tar.gz, .zip y .rar.
+    """
+    sftp, transport = cliente_sft(host, port, username, password)
 
     # Listar todos los archivos en el directorio remoto
     archivos = sftp.listdir()
@@ -91,7 +101,7 @@ def fecha_mes_vencido() -> str:
     fecha_vencida = str(anho_vencido)+str(mes_vencido)
     return fecha_vencida
 
-# Función para extraer año y mes de un nombre de archivo
+
 def extraer_fecha(nombre:str) -> str:
     """
     Extrae y devuelve el año y mes desde el nombre de un archivo.
@@ -130,3 +140,46 @@ def filtrar_facturas_mes_vencido(conteo_archivos: ConteoArchivos) -> List[str]:
     _logger.info(f"Lista final: {lista_archivos_copiar}")
     print()
     return lista_archivos_copiar
+
+
+def descargar_archivos_sftp(conteo_archivos: ConteoArchivos, host: str, port: int, username: str, password: str, lista_archivos_copiar: List[str], destino: str) -> None:
+    """
+    Descarga archivos desde un servidor SFTP cuyos nombres coincidan con los de una lista dada.
+
+    Args:
+        host (str): Dirección del servidor SFTP.
+        port (int): Puerto del servidor SFTP.
+        username (str): Nombre de usuario para el acceso SFTP.
+        password (str): Contraseña para el acceso SFTP.
+        archivos_a_descargar (List[str]): Lista de nombres de archivos a descargar.
+        destino (str): Directorio destino donde se guardarán los archivos descargados.
+
+    Returns:
+        None
+    """
+    # Crear el cliente SFTP
+    _logger.info("Estableciendo conexión SFTP")
+    sftp, transport = cliente_sft(host, port, username, password)
+    
+    lista_archivos_copiar = filtrar_facturas_mes_vencido(conteo_archivos)
+        
+    # Descargar los archivos que coinciden con los nombres en la lista
+    for archivo in lista_archivos_copiar:
+        remote_file_path = Path(archivo)
+        local_file_path = Path.cwd() / destino / archivo
+                    
+        if local_file_path.exists():
+            _logger.warning(f"El archivo ya existe en el directorio de descarga, se omite dicha descarga: {local_file_path}")
+            continue
+        try:
+
+            _logger.info(f"Descargando archivo: {archivo}")
+            sftp.get(str(remote_file_path), str(local_file_path))
+            _logger.info(f"{archivo} descargado satisfactoriamente")
+        except Exception as e:
+            _logger.error(f"Error descargando el archivo: {archivo}")
+    
+    # Cerrar la conexión SFTP
+    _logger.info("Cerrando conexión SFTP")
+    sftp.close()
+    transport.close()
