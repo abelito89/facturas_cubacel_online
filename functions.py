@@ -8,7 +8,10 @@ from pathlib import Path
 import zipfile
 import rarfile
 import tarfile
+from email_sender import send_email
+from dotenv import load_dotenv
 
+load_dotenv()
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 _logger = logging.getLogger(__name__)
 
@@ -186,6 +189,11 @@ def descargar_archivos_sftp(conteo_archivos: ConteoArchivos, host: str, port: in
     _logger.info("Cerrando conexión SFTP")
     sftp.close()
     transport.close()
+    # Envio de correo de notificacion
+    to_email = os.getenv("TO_EMAIL")
+    subject = "Prueba"
+    body = "prueba"
+    send_email(to_email, subject, body)
     print()
     
 
