@@ -199,7 +199,7 @@ def descargar_archivos_sftp(conteo_archivos: ConteoArchivos, host: str, port: in
 
 def descomprimir_zip(file_path: Path, output_dir: Path) -> None:
     """
-    Descomprime un archivo zip.
+    Descomprime un archivo zip y verifica si ya está descomprimido.
 
     Args:
         file_path (Path): Ruta del archivo zip.
@@ -210,14 +210,23 @@ def descomprimir_zip(file_path: Path, output_dir: Path) -> None:
     """
     try:
         with zipfile.ZipFile(file_path, 'r') as zip_ref:
-            zip_ref.extractall(output_dir)
+            # Verificar si todos los archivos ya están descomprimidos
+            all_files_exist = all((output_dir / member).exists() for member in zip_ref.namelist())
+            if all_files_exist:
+                _logger.info(f"El archivo ZIP: {file_path} ya está descomprimido")
+                return  # Salir sin extraer nada
+
+            # Extraer los archivos si no están descomprimidos
+            _logger.info(f"Descomprimiendo archivo ZIP: {file_path}")
+            zip_ref.extractall(str(output_dir))
         _logger.info(f"Archivo ZIP descomprimido: {file_path}")
     except Exception as e:
         _logger.error(f"Error al descomprimir el archivo ZIP {file_path}: {e}")
 
+
 def descomprimir_rar(file_path: Path, output_dir: Path) -> None:
     """
-    Descomprime un archivo rar.
+    Descomprime un archivo rar y verifica si ya está descomprimido.
 
     Args:
         file_path (Path): Ruta del archivo rar.
@@ -228,14 +237,24 @@ def descomprimir_rar(file_path: Path, output_dir: Path) -> None:
     """
     try:
         with rarfile.RarFile(file_path, 'r') as rar_ref:
+            # Verificar si todos los archivos ya están descomprimidos
+            all_files_exist = all((output_dir / member).exists() for member in rar_ref.getnames())
+            if all_files_exist:
+                _logger.info(f"El archivo RAR: {file_path} ya está descomprimido")
+                return  # Salir sin extraer nada
+
+            # Extraer los archivos si no están descomprimidos
+            _logger.info(f"Descomprimiendo archivo RAR: {file_path}")
             rar_ref.extractall(output_dir)
         _logger.info(f"Archivo RAR descomprimido: {file_path}")
     except Exception as e:
         _logger.error(f"Error al descomprimir el archivo RAR {file_path}: {e}")
 
+
+
 def descomprimir_tar_gz(file_path: Path, output_dir: Path) -> None:
     """
-    Descomprime un archivo tar.gz.
+    Descomprime un archivo tar.gz y verifica si ya está descomprimido.
 
     Args:
         file_path (Path): Ruta del archivo tar.gz.
@@ -246,12 +265,19 @@ def descomprimir_tar_gz(file_path: Path, output_dir: Path) -> None:
     """
     try:
         with tarfile.open(file_path, 'r:gz') as tar_ref:
+            # Verificar si todos los archivos ya están descomprimidos
+            all_files_exist = all((output_dir / member).exists() for member in tar_ref.getnames())
+            if all_files_exist:
+                _logger.info(f"El archivo TAR.GZ: {file_path} ya está descomprimido")
+                return  # Salir sin extraer nada
+
+            # Extraer los archivos si no están descomprimidos
+            _logger.info(f"Descomprimiendo archivo TAR.GZ: {file_path}")
             tar_ref.extractall(output_dir)
         _logger.info(f"Archivo TAR.GZ descomprimido: {file_path}")
     except Exception as e:
         _logger.error(f"Error al descomprimir el archivo TAR.GZ {file_path}: {e}")
             
-
 
 def descomprimir_archivos(directorio: str) -> None:
     """
@@ -282,13 +308,10 @@ def descomprimir_archivos(directorio: str) -> None:
 
             # Llamar a la función adecuada para descomprimir
             if file_path.suffix == '.zip':
-                _logger.info(f"Descomprimiendo archivo ZIP: {file_path}")
                 descomprimir_zip(file_path, output_dir)  # Usar output_dir
             elif file_path.suffix == '.rar':
-                _logger.info(f"Descomprimiendo archivo RAR: {file_path}")
                 descomprimir_rar(file_path, output_dir)  # Usar output_dir
             elif file_path.name.endswith('.tar.gz') or file_path.suffix in ['.tar.gz', '.tgz']:
-                _logger.info(f"Descomprimiendo archivo TAR.GZ: {file_path}")
                 descomprimir_tar_gz(file_path, output_dir)  # Usar output_dir
         else:
             _logger.warning(f"Tipo de archivo no soportado: {file_path}")
@@ -296,7 +319,16 @@ def descomprimir_archivos(directorio: str) -> None:
 
 def eliminar_comprimidos(directorio: str) -> None:
     """
-
+    Elimina archivos comprimidos (.zip, .rar, .tar.gz) en el directorio dado.
+    
+    Args: 
+        directorio (str): Ruta del directorio donde se encuentran los archivos comprimidos.
+         
+    Returns:
+        None
+        
+    Raises: 
+        FileNotFoundError: Si el directorio no existe o no es válido.
     """
     dir_path = Path(directorio)
     _logger.info(f"Iniciando deliminación de descomprimidos")
@@ -313,3 +345,34 @@ def eliminar_comprimidos(directorio: str) -> None:
                 _logger.info(f"Archivo {file_path} eliminado")
             except Exception as e:
                 _logger.error(f"No se puedo eliminar el archivo: {e}")
+                
+
+def subir_carpeta_a_sftp(host: str, port: int, username: str, password: str, carpeta_local: str, carpeta_buscar:str) -> None:
+    """
+
+    """
+    sftp, transport = cliente_sft(host, port, username, password)
+    
+    carpeta_local_path = Path(carpeta_local)
+    
+    def buscar_carpeta(carpeta_local_path:Path, carpeta_buscar:str):
+        for item in carpeta_local_path.iterdir():
+            if item.is_dir and item.name == carpeta_buscar:
+                return item
+        return None
+    carpeta_encontrada = buscar_carpeta(carpeta_local_path, carpeta_buscar)
+    
+    if carpeta_local_path:
+        try:
+            sftp.put(str(carpeta_encontrada),"/")
+            sftp.close()
+            transport.close()
+            _logger.info("Carpeta subida exitosamente")
+        except IOError as e:
+            _logger.error(f"Error al subir la carpeta: {e}")
+        except Exception as e:
+            _logger.error(f"Error inesperado al subir la carpeta: {e}")        
+    else:
+        _logger.warning(f"No se encontró la carpeta {carpeta_buscar} en la carpeta {carpeta_local}")    
+        sftp.close()
+        transport.close()

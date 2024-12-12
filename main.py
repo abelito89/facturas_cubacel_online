@@ -2,7 +2,7 @@ import uvicorn
 from fastapi import FastAPI
 import os
 from dotenv import load_dotenv
-from functions import read_from_sftp, filtrar_facturas_mes_vencido, clear_console, descargar_archivos_sftp, descomprimir_archivos, eliminar_comprimidos
+from functions import read_from_sftp, filtrar_facturas_mes_vencido, clear_console, descargar_archivos_sftp, descomprimir_archivos, eliminar_comprimidos, subir_carpeta_a_sftp
 import logging
 from pathlib import Path
 
@@ -35,7 +35,9 @@ async def descompactar_facturas(host:str = host, port: int = int(port), username
     direccion_destino_descarga.mkdir(parents=True, exist_ok=True)
     descargar_archivos_sftp(conteo_archivos, host, port, username, password, lista_archivos_copiar, direccion_destino_descarga)
     descomprimir_archivos(direccion_destino_descarga)
-    eliminar_comprimidos(direccion_destino_descarga)
+    carpeta_buscar = "prueba"
+    subir_carpeta_a_sftp(host, port, username, password, destino_descarga, carpeta_buscar) 
+    # eliminar_comprimidos(direccion_destino_descarga)
 
 
 if __name__ == "__main__":
