@@ -12,7 +12,7 @@ from email_sender import send_email
 from dotenv import load_dotenv
 
 load_dotenv()
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 _logger = logging.getLogger(__name__)
 
 
@@ -345,34 +345,82 @@ def eliminar_comprimidos(directorio: str) -> None:
                 _logger.info(f"Archivo {file_path} eliminado")
             except Exception as e:
                 _logger.error(f"No se puedo eliminar el archivo: {e}")
-                
 
-def subir_carpeta_a_sftp(host: str, port: int, username: str, password: str, carpeta_local: str, carpeta_buscar:str) -> None:
+
+def subir_carpeta_a_sftp(host: str, port: int, username: str, password: str, carpeta_local: str, carpeta_buscar: str) -> None:
     """
+    Busca una carpeta específica en el directorio local y sube su contenido a un servidor SFTP.
 
+    Args:
+        host (str): Dirección del servidor SFTP.
+        port (int): Puerto del servidor SFTP.
+        username (str): Nombre de usuario para el acceso SFTP.
+        password (str): Contraseña para el acceso SFTP.
+        carpeta_local (str): Ruta del directorio local donde se buscará la carpeta.
+        carpeta_buscar (str): Nombre de la carpeta a buscar y subir.
     """
     sftp, transport = cliente_sft(host, port, username, password)
     
     carpeta_local_path = Path(carpeta_local)
     
-    def buscar_carpeta(carpeta_local_path:Path, carpeta_buscar:str):
+    def buscar_carpeta(carpeta_local_path: Path, carpeta_buscar: str):
+        """
+        Busca una carpeta específica dentro de un directorio dado.
+
+        Args:
+            carpeta_local_path (Path): Ruta del directorio local donde buscar la carpeta.
+            carpeta_buscar (str): Nombre de la carpeta a buscar.
+
+        Returns:
+            Path or None: Retorna la ruta de la carpeta encontrada o None si no se encuentra.
+        """
+        _logger.debug(f"Buscando carpeta {carpeta_buscar} en {carpeta_local_path}")
         for item in carpeta_local_path.iterdir():
-            if item.is_dir and item.name == carpeta_buscar:
+            _logger.debug(f"Encontrado: {item}")
+            if item.is_dir() and item.name == carpeta_buscar:
+                _logger.debug(f"Carpeta encontrada: {item}")
                 return item
         return None
+    
     carpeta_encontrada = buscar_carpeta(carpeta_local_path, carpeta_buscar)
     
-    if carpeta_local_path:
+    if carpeta_encontrada:
         try:
-            sftp.put(str(carpeta_encontrada),"/")
+            # Crear la carpeta remota con el mismo nombre que la carpeta encontrada
+            remote_directory_path = f"/{carpeta_encontrada.name}"
+            _logger.debug(f"Creando directorio remoto: {remote_directory_path}")
+            try:
+                sftp.stat(remote_directory_path)
+                _logger.debug(f"Directorio remoto {remote_directory_path} ya existe")
+            except IOError:
+                sftp.mkdir(remote_directory_path)
+                _logger.debug(f"Directorio remoto {remote_directory_path} creado")
+            
+            # Iterar sobre todos los archivos PDF en la carpeta encontrada
+            for pdf_file in carpeta_encontrada.glob('*.pdf'):
+                remote_file_path = f"{remote_directory_path}/{pdf_file.name}"
+                
+                # Debugging: Verificar permisos locales y remotos antes de subir 
+                local_permissions = os.access(pdf_file, os.R_OK) 
+                remote_permissions = sftp.stat(remote_directory_path).st_mode 
+                
+                sftp.stat(remote_directory_path).st_mode 
+                _logger.debug(f"Permisos locales para {pdf_file}: {local_permissions}") 
+                _logger.debug(f"Permisos del directorio remoto {remote_directory_path}: {remote_permissions}")
+                
+                # Subir el archivo PDF al SFTP
+                _logger.debug(f"Subiendo {pdf_file} a {remote_file_path}")
+                sftp.put(str(pdf_file), remote_file_path)
+                _logger.debug(f"Archivo {pdf_file} subido a {remote_file_path}")
+            
             sftp.close()
             transport.close()
             _logger.info("Carpeta subida exitosamente")
         except IOError as e:
             _logger.error(f"Error al subir la carpeta: {e}")
         except Exception as e:
-            _logger.error(f"Error inesperado al subir la carpeta: {e}")        
+            _logger.error(f"Error inesperado al subir la carpeta: {e}")
     else:
-        _logger.warning(f"No se encontró la carpeta {carpeta_buscar} en la carpeta {carpeta_local}")    
+        _logger.warning(f"No se encontró la carpeta {carpeta_buscar} en la carpeta {carpeta_local}")
         sftp.close()
         transport.close()
