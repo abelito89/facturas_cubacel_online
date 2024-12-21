@@ -7,7 +7,7 @@ import logging
 from pathlib import Path
 
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logging.basicConfig(level=logging.debug, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 _logger = logging.getLogger(__name__)
 
 app = FastAPI()
@@ -19,6 +19,15 @@ host = os.getenv("IP_FTP")
 port = os.getenv("PORT")
 username = os.getenv("USER")
 password = os.getenv("PASSWORD")
+
+if not all([host, port, username, password]):
+    raise ValueError("Faltan variables críticas en el archivo .env (IP_FTP, PORT, USER, PASSWORD).")
+
+# Validación adicional para `PORT`
+try:
+    port = int(port)  # Asegura que sea un número
+except ValueError:
+    raise ValueError("El puerto (PORT) debe ser un número válido.")
 
 @app.get("/decompactar_facturas")
 async def descompactar_facturas(host:str = host, port: int = int(port), username:str = username, password:str = password) -> None:

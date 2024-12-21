@@ -12,6 +12,7 @@ from email_sender import send_email
 from dotenv import load_dotenv
 
 load_dotenv()
+
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 _logger = logging.getLogger(__name__)
 
@@ -383,18 +384,54 @@ def subir_carpeta_a_sftp(host: str, port: int, username: str, password: str, car
         return None
     
     carpeta_encontrada = buscar_carpeta(carpeta_local_path, carpeta_buscar)
+    _logger.info(f"Ya está creada la carpeta {carpeta_encontrada}")
+    _logger.info(f"Tipo de carpeta_encontrada: {type(carpeta_encontrada)}")
+    _logger.info(f"Valor de carpeta_encontrada: {carpeta_encontrada}")
+
     
     if carpeta_encontrada:
+        _logger.info(f"Entrando en el IF")
         try:
-            # Crear la carpeta remota con el mismo nombre que la carpeta encontrada
-            remote_directory_path = f"/{carpeta_encontrada.name}"
-            _logger.debug(f"Creando directorio remoto: {remote_directory_path}")
+            # Obtén la ruta de inicio del usuario
+            home_directory = sftp.normalize(".")
+            _logger.info(f"La ruta de inicio del usuario SFTP es: {home_directory}")
+            
+            # Ajusta la ruta remota
+            remote_directory_path = f"{home_directory.rstrip('/')}/{carpeta_encontrada.name}"
+            _logger.info(f"Ruta remota ajustada correctamente: {remote_directory_path}")
+
             try:
+                # Ajustar manualmente la ruta base a /upload
+                home_directory = '/upload'  # Directorio base en el contenedor Docker
+                _logger.info(f"Directorio base manual ajustado a: {home_directory}")
+
+                # Ajustar la ruta remota
+                remote_directory_path = f"{home_directory.rstrip('/')}/{carpeta_encontrada.name}"
+                _logger.info(f"Ruta remota ajustada correctamente: {remote_directory_path}")
+
+                # Verificar si el directorio remoto existe
+                _logger.info(f"Verificando si el directorio remoto {remote_directory_path} existe.")
                 sftp.stat(remote_directory_path)
-                _logger.debug(f"Directorio remoto {remote_directory_path} ya existe")
-            except IOError:
-                sftp.mkdir(remote_directory_path)
-                _logger.debug(f"Directorio remoto {remote_directory_path} creado")
+                _logger.info(f"Directorio remoto {remote_directory_path} ya existe.")
+            except FileNotFoundError:
+                # Si no existe, intenta crearlo
+                _logger.info(f"Directorio remoto {remote_directory_path} no existe. Intentando crearlo...")
+                try:
+                    sftp.mkdir(remote_directory_path)
+                    _logger.info(f"Directorio remoto creado exitosamente: {remote_directory_path}")
+                except Exception as e:
+                    _logger.error(f"Error creando directorio remoto {remote_directory_path}: {e}")
+                    raise
+
+            except IOError as e:
+                # Maneja cualquier otro error de entrada/salida
+                _logger.error(f"Error al verificar o crear el directorio remoto {remote_directory_path}: {e}")
+                raise
+            except Exception as e:
+                # Maneja errores inesperados
+                _logger.error(f"Error inesperado al manejar el directorio remoto {remote_directory_path}: {e}")
+                raise
+
             
             # Iterar sobre todos los archivos PDF en la carpeta encontrada
             for pdf_file in carpeta_encontrada.glob('*.pdf'):
@@ -405,13 +442,13 @@ def subir_carpeta_a_sftp(host: str, port: int, username: str, password: str, car
                 remote_permissions = sftp.stat(remote_directory_path).st_mode 
                 
                 sftp.stat(remote_directory_path).st_mode 
-                _logger.debug(f"Permisos locales para {pdf_file}: {local_permissions}") 
-                _logger.debug(f"Permisos del directorio remoto {remote_directory_path}: {remote_permissions}")
+                _logger.info(f"Permisos locales para {pdf_file}: {local_permissions}") 
+                _logger.info(f"Permisos del directorio remoto {remote_directory_path}: {remote_permissions}")
                 
                 # Subir el archivo PDF al SFTP
-                _logger.debug(f"Subiendo {pdf_file} a {remote_file_path}")
+                _logger.info(f"Subiendo {pdf_file} a {remote_file_path}")
                 sftp.put(str(pdf_file), remote_file_path)
-                _logger.debug(f"Archivo {pdf_file} subido a {remote_file_path}")
+                _logger.info(f"Archivo {pdf_file} subido a {remote_file_path}")
             
             sftp.close()
             transport.close()
