@@ -280,7 +280,7 @@ def descomprimir_tar_gz(file_path: Path, output_dir: Path) -> None:
         _logger.error(f"Error al descomprimir el archivo TAR.GZ {file_path}: {e}")
             
 
-def descomprimir_archivos(directorio: str) -> None:
+def descomprimir_archivos(directorio: str) -> str:
     """
     Descomprime todos los archivos .zip, .rar y .tar.gz en el directorio dado.
 
@@ -316,6 +316,7 @@ def descomprimir_archivos(directorio: str) -> None:
                 descomprimir_tar_gz(file_path, output_dir)  # Usar output_dir
         else:
             _logger.warning(f"Tipo de archivo no soportado: {file_path}")
+    return output_dir_name
             
 
 def eliminar_comprimidos(directorio: str) -> None:
@@ -400,59 +401,43 @@ def subir_carpeta_a_sftp(host: str, port: int, username: str, password: str, car
             remote_directory_path = f"{home_directory.rstrip('/')}/{carpeta_encontrada.name}"
             _logger.info(f"Ruta remota ajustada correctamente: {remote_directory_path}")
 
+            # Verificar si el directorio remoto existe
+            _logger.info(f"Verificando si el directorio remoto {remote_directory_path} existe.")
+            sftp.stat(remote_directory_path)
+            _logger.info(f"Directorio remoto {remote_directory_path} ya existe.")
+        except FileNotFoundError:
+            # Si no existe, intenta crearlo
+            _logger.info(f"Directorio remoto {remote_directory_path} no existe. Intentando crearlo...")
             try:
-                # Ajustar manualmente la ruta base a /upload
-                home_directory = '/upload'  # Directorio base en el contenedor Docker
-                _logger.info(f"Directorio base manual ajustado a: {home_directory}")
-
-                # Ajustar la ruta remota
-                remote_directory_path = f"{home_directory.rstrip('/')}/{carpeta_encontrada.name}"
-                _logger.info(f"Ruta remota ajustada correctamente: {remote_directory_path}")
-
-                # Verificar si el directorio remoto existe
-                _logger.info(f"Verificando si el directorio remoto {remote_directory_path} existe.")
-                sftp.stat(remote_directory_path)
-                _logger.info(f"Directorio remoto {remote_directory_path} ya existe.")
-            except FileNotFoundError:
-                # Si no existe, intenta crearlo
-                _logger.info(f"Directorio remoto {remote_directory_path} no existe. Intentando crearlo...")
-                try:
-                    sftp.mkdir(remote_directory_path)
-                    _logger.info(f"Directorio remoto creado exitosamente: {remote_directory_path}")
-                except Exception as e:
-                    _logger.error(f"Error creando directorio remoto {remote_directory_path}: {e}")
-                    raise
+                sftp.mkdir(remote_directory_path)
+                _logger.info(f"Directorio remoto creado exitosamente: {remote_directory_path}")
+            except Exception as e:
+                _logger.error(f"Error creando directorio remoto {remote_directory_path}: {e}")
+                raise
 
             except IOError as e:
                 # Maneja cualquier otro error de entrada/salida
                 _logger.error(f"Error al verificar o crear el directorio remoto {remote_directory_path}: {e}")
                 raise
-            except Exception as e:
-                # Maneja errores inesperados
-                _logger.error(f"Error inesperado al manejar el directorio remoto {remote_directory_path}: {e}")
-                raise
+        except Exception as e:
+            # Maneja errores inesperados
+            _logger.error(f"Error inesperado al manejar el directorio remoto {remote_directory_path}: {e}")
+            raise
 
-            
-            # Iterar sobre todos los archivos PDF en la carpeta encontrada
+        try:
+            cantidad_de_copiados = 0 
+        # Iterar sobre todos los archivos PDF en la carpeta encontrada
             for pdf_file in carpeta_encontrada.glob('*.pdf'):
-                remote_file_path = f"{remote_directory_path}/{pdf_file.name}"
-                
-                # Debugging: Verificar permisos locales y remotos antes de subir 
-                local_permissions = os.access(pdf_file, os.R_OK) 
-                remote_permissions = sftp.stat(remote_directory_path).st_mode 
-                
+                remote_file_path = f"{remote_directory_path}/{pdf_file.name}"                
                 sftp.stat(remote_directory_path).st_mode 
-                _logger.info(f"Permisos locales para {pdf_file}: {local_permissions}") 
-                _logger.info(f"Permisos del directorio remoto {remote_directory_path}: {remote_permissions}")
                 
                 # Subir el archivo PDF al SFTP
-                _logger.info(f"Subiendo {pdf_file} a {remote_file_path}")
                 sftp.put(str(pdf_file), remote_file_path)
                 _logger.info(f"Archivo {pdf_file} subido a {remote_file_path}")
-            
+                cantidad_de_copiados += 1
             sftp.close()
             transport.close()
-            _logger.info("Carpeta subida exitosamente")
+            _logger.info(f"Carpeta subida exitosamente con {cantidad_de_copiados} copiados existosamente")
         except IOError as e:
             _logger.error(f"Error al subir la carpeta: {e}")
         except Exception as e:
