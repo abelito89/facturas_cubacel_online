@@ -344,15 +344,24 @@ def eliminar_comprimidos(directorio: str) -> None:
 
 def subir_carpeta_a_sftp(host: str, port: int, username: str, password: str, carpeta_local: str, carpeta_buscar: str) -> None:
     """
-    Busca una carpeta específica en el directorio local y sube su contenido a un servidor SFTP.
-
-    Args:
-        host (str): Dirección del servidor SFTP.
-        port (int): Puerto del servidor SFTP.
-        username (str): Nombre de usuario para el acceso SFTP.
-        password (str): Contraseña para el acceso SFTP.
-        carpeta_local (str): Ruta del directorio local donde se buscará la carpeta.
-        carpeta_buscar (str): Nombre de la carpeta a buscar y subir.
+    Busca una carpeta específica en el directorio local y sube su contenido a un servidor SFTP. 
+    
+    Esta función realiza los siguientes pasos: 
+    1. Conectarse al servidor SFTP. 
+    2. Buscar la carpeta especificada en el directorio local. 
+    3. Si la carpeta se encuentra, verificar si el directorio remoto existe en el servidor SFTP. 
+    4. Crear el directorio remoto si no existe. 
+    5. Subir los archivos PDF de la carpeta local al directorio remoto en el servidor SFTP. 
+    
+    Args: 
+        host (str): Dirección del servidor SFTP. 
+        port (int): Puerto del servidor SFTP. 
+        username (str): Nombre de usuario para el acceso SFTP. 
+        password (str): Contraseña para el acceso SFTP. 
+        carpeta_local (str): Ruta del directorio local donde se buscará la carpeta. 
+        carpeta_buscar (str): Nombre de la carpeta a buscar y subir. 
+    Returns: 
+        None
     """
     sftp, transport = cliente_sft(host, port, username, password)
     
@@ -433,6 +442,7 @@ def subir_carpeta_a_sftp(host: str, port: int, username: str, password: str, car
 
                     if remote_file_size == local_file_size:
                         _logger.info(f"Archivo {remote_file_path} ya existe y tiene el mismo tamaño, omitiendo...")
+                        print("")
                     else:
                         sftp.put(str(pdf_file), remote_file_path)
                         _logger.info(f"Archivo {pdf_file} subido a {remote_file_path}")
@@ -453,3 +463,39 @@ def subir_carpeta_a_sftp(host: str, port: int, username: str, password: str, car
         _logger.warning(f"No se encontró la carpeta {carpeta_buscar} en la carpeta {carpeta_local}")
         sftp.close()
         transport.close()
+
+
+def ejecutar_descompactar_facturas(host:str , port: int , username:str, password) -> None:
+    """
+    Realiza el proceso de descompactación y subida de facturas a un servidor SFTP. 
+    Este proceso incluye: 
+    1. Limpiar la consola. 
+    2. Leer archivos desde el servidor SFTP. 
+    3. Filtrar facturas del mes vencido. 
+    4. Descargar archivos filtrados desde el servidor SFTP. 
+    5. Descomprimir los archivos descargados. 
+    6. Subir la carpeta descomprimida al servidor SFTP.
+    
+    Args: 
+        host (str): Dirección del servidor SFTP. 
+        port (int): Puerto del servidor SFTP. 
+        username (str): Nombre de usuario para el acceso SFTP. 
+        password (str): Contraseña para el acceso SFTP. 
+    Returns: 
+        None
+    """
+    clear_console()
+    conteo_archivos = read_from_sftp(host, port, username, password)
+    print()
+    _logger.info(f"Archivos .tar.gz: {conteo_archivos.tar_gz_files}") 
+    _logger.info(f"Archivos .zip: {conteo_archivos.zip_files}") 
+    _logger.info(f"Archivos .rar: {conteo_archivos.rar_files}")
+    
+    lista_archivos_copiar = filtrar_facturas_mes_vencido(conteo_archivos)
+    destino_descarga = "archivos_descargados"
+    direccion_destino_descarga = Path.cwd() / destino_descarga
+    direccion_destino_descarga.mkdir(parents=True, exist_ok=True)
+    descargar_archivos_sftp(conteo_archivos, host, port, username, password, lista_archivos_copiar, direccion_destino_descarga)
+    carpeta_buscar = descomprimir_archivos(direccion_destino_descarga)
+    subir_carpeta_a_sftp(host, port, username, password, destino_descarga, carpeta_buscar) 
+    # eliminar_comprimidos(direccion_destino_descarga)
