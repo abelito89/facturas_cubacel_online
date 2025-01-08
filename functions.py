@@ -11,10 +11,17 @@ import tarfile
 from dotenv import load_dotenv
 
 load_dotenv()
-
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+dir_log = Path("logs") / f"log_facturas_cubacel_online.log"
+logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+                    handlers=[logging.FileHandler(dir_log), logging.StreamHandler()]
+                    )
 _logger = logging.getLogger(__name__)
 
+paramiko_logger = logging.getLogger("paramiko")
+paramiko_logger.setLevel(logging.WARNING)
+
+# Declaración de la variable global 
+lista_archivos_copiar_1 = []
 
 def clear_console() -> None:
     """
@@ -40,7 +47,7 @@ from typing import Tuple
 
 def cliente_sft(host: str, port: int, username: str, password: str) -> Tuple[paramiko.SFTPClient, paramiko.Transport]:
     """
-    Establece una conexión SFTP y retorna el cliente y el transporte.
+    Establece una conexion SFTP y retorna el cliente y el transporte.
 
     Args:
         host (str): Dirección del servidor SFTP.
@@ -148,7 +155,9 @@ def filtrar_facturas_mes_vencido(conteo_archivos: ConteoArchivos) -> List[str]:
     return lista_archivos_copiar
 
 
+
 def descargar_archivos_sftp(conteo_archivos: ConteoArchivos, host: str, port: int, username: str, password: str, lista_archivos_copiar: List[str], destino: str) -> None:
+    global lista_archivos_copiar_1
     """
     Descarga archivos desde un servidor SFTP cuyos nombres coincidan con los de una lista dada.
 
@@ -164,10 +173,10 @@ def descargar_archivos_sftp(conteo_archivos: ConteoArchivos, host: str, port: in
         None
     """
     # Crear el cliente SFTP
-    _logger.info("Estableciendo conexión SFTP")
+    _logger.info("Estableciendo conexion SFTP")
     sftp, transport = cliente_sft(host, port, username, password)
     
-    lista_archivos_copiar = filtrar_facturas_mes_vencido(conteo_archivos)
+    lista_archivos_copiar_1 = filtrar_facturas_mes_vencido(conteo_archivos)
         
     # Descargar los archivos que coinciden con los nombres en la lista
     for archivo in lista_archivos_copiar:
@@ -186,7 +195,7 @@ def descargar_archivos_sftp(conteo_archivos: ConteoArchivos, host: str, port: in
             _logger.error(f"Error descargando el archivo: {archivo}")
     
     # Cerrar la conexión SFTP
-    _logger.info("Cerrando conexión SFTP")
+    _logger.info("Cerrando conexion SFTP")
     sftp.close()
     transport.close()
     
@@ -207,7 +216,7 @@ def descomprimir_zip(file_path: Path, output_dir: Path) -> None:
             # Verificar si todos los archivos ya están descomprimidos
             all_files_exist = all((output_dir / member).exists() for member in zip_ref.namelist())
             if all_files_exist:
-                _logger.info(f"El archivo ZIP: {file_path} ya está descomprimido")
+                _logger.info(f"El archivo ZIP: {file_path} ya esta descomprimido")
                 return  # Salir sin extraer nada
 
             # Extraer los archivos si no están descomprimidos
@@ -234,7 +243,7 @@ def descomprimir_rar(file_path: Path, output_dir: Path) -> None:
             # Verificar si todos los archivos ya están descomprimidos
             all_files_exist = all((output_dir / member).exists() for member in rar_ref.getnames())
             if all_files_exist:
-                _logger.info(f"El archivo RAR: {file_path} ya está descomprimido")
+                _logger.info(f"El archivo RAR: {file_path} ya esta descomprimido")
                 return  # Salir sin extraer nada
 
             # Extraer los archivos si no están descomprimidos
@@ -262,7 +271,7 @@ def descomprimir_tar_gz(file_path: Path, output_dir: Path) -> None:
             # Verificar si todos los archivos ya están descomprimidos
             all_files_exist = all((output_dir / member).exists() for member in tar_ref.getnames())
             if all_files_exist:
-                _logger.info(f"El archivo TAR.GZ: {file_path} ya está descomprimido")
+                _logger.info(f"El archivo TAR.GZ: {file_path} ya esta descomprimido")
                 return  # Salir sin extraer nada
 
             # Extraer los archivos si no están descomprimidos
@@ -284,11 +293,11 @@ def descomprimir_archivos(directorio: str) -> str:
         None
     """
     dir_path = Path(directorio)
-    _logger.info(f"Iniciando descompresión")
+    _logger.info(f"Iniciando descompresion")
 
     # Verificar que el directorio existe
     if not dir_path.exists() or not dir_path.is_dir():
-        raise FileNotFoundError(f"El directorio {directorio} no existe o no es un directorio válido")
+        raise FileNotFoundError(f"El directorio {directorio} no existe o no es un directorio valido")
 
     # Recorrer todos los archivos en el directorio
     for file_path in dir_path.iterdir():
@@ -326,11 +335,11 @@ def eliminar_comprimidos(directorio: str) -> None:
         FileNotFoundError: Si el directorio no existe o no es válido.
     """
     dir_path = Path(directorio)
-    _logger.info(f"Iniciando deliminación de descomprimidos")
+    _logger.info(f"Iniciando deliminacion de descomprimidos")
 
     # Verificar que el directorio existe
     if not dir_path.exists() or not dir_path.is_dir():
-        raise FileNotFoundError(f"El directorio {directorio} no existe o no es un directorio válido")
+        raise FileNotFoundError(f"El directorio {directorio} no existe o no es un directorio valido")
 
     # Recorrer todos los archivos en el directorio
     for file_path in dir_path.iterdir():
@@ -380,20 +389,15 @@ def subir_carpeta_a_sftp(host: str, port: int, username: str, password: str, car
         """
         _logger.debug(f"Buscando carpeta {carpeta_buscar} en {carpeta_local_path}")
         for item in carpeta_local_path.iterdir():
-            _logger.debug(f"Encontrado: {item}")
             if item.is_dir() and item.name == carpeta_buscar:
                 _logger.debug(f"Carpeta encontrada: {item}")
                 return item
         return None
     
     carpeta_encontrada = buscar_carpeta(carpeta_local_path, carpeta_buscar)
-    _logger.info(f"Ya está creada la carpeta {carpeta_encontrada}")
-    _logger.info(f"Tipo de carpeta_encontrada: {type(carpeta_encontrada)}")
-    _logger.info(f"Valor de carpeta_encontrada: {carpeta_encontrada}")
-
     
     if carpeta_encontrada:
-        _logger.info(f"Entrando en el IF")
+        _logger.info(f"Carpeta {carpeta_encontrada} encontrada y lista para subir su contenido al SFTP")
         try:
             # Obtén la ruta de inicio del usuario
             home_directory = sftp.normalize(".")
@@ -401,7 +405,6 @@ def subir_carpeta_a_sftp(host: str, port: int, username: str, password: str, car
             
             # Ajusta la ruta remota
             remote_directory_path = f"{home_directory.rstrip('/')}/{carpeta_encontrada.name}"
-            _logger.info(f"Ruta remota ajustada correctamente: {remote_directory_path}")
 
             # Verificar si el directorio remoto existe
             _logger.info(f"Verificando si el directorio remoto {remote_directory_path} existe.")
@@ -427,7 +430,8 @@ def subir_carpeta_a_sftp(host: str, port: int, username: str, password: str, car
             raise
 
         try:
-            cantidad_de_copiados = 0 
+            cantidad_de_copiados = 0
+            cantidad_de_verificados = 0
         # Iterar sobre todos los archivos PDF en la carpeta encontrada
             for pdf_file in carpeta_encontrada.glob('*.pdf'):
                 remote_file_path = f"{remote_directory_path}/{pdf_file.name}"                
@@ -439,22 +443,25 @@ def subir_carpeta_a_sftp(host: str, port: int, username: str, password: str, car
                     remote_file_stat = sftp.stat(remote_file_path)
                     remote_file_size = remote_file_stat.st_size
                     local_file_size = pdf_file.stat().st_size
-
+                    cantidad_de_verificados += 1
                     if remote_file_size == local_file_size:
-                        _logger.info(f"Archivo {remote_file_path} ya existe y tiene el mismo tamaño, omitiendo...")
+                        print(f"Archivo {remote_file_path} ya existe y tiene el mismo tamaño, no se hace nada y se revisa el siguiente")
                         print("")
                     else:
                         sftp.put(str(pdf_file), remote_file_path)
-                        _logger.info(f"Archivo {pdf_file} subido a {remote_file_path}")
+                        print(f"Archivo {pdf_file} subido a {remote_file_path}")
                         cantidad_de_copiados += 1
                 except FileNotFoundError:
                     sftp.put(str(pdf_file), remote_file_path)
-                    _logger.info(f"Archivo {pdf_file} subido a {remote_file_path}")
+                    print(f"Archivo {pdf_file} subido a {remote_file_path}")
+                    cantidad_de_verificados += 1
                     cantidad_de_copiados += 1
 
             sftp.close()
             transport.close()
-            _logger.info(f"Carpeta subida exitosamente con {cantidad_de_copiados} copiados correctamente")
+            _logger.info(f"Carpeta subida exitosamente al sftp")
+            _logger.info(f"Cantidad de archivos verificados: {cantidad_de_verificados}")
+            _logger.info(f"Cantidad de archivos subidos al sftp: {cantidad_de_copiados}")
         except IOError as e:
             _logger.error(f"Error al subir la carpeta: {e}")
         except Exception as e:
@@ -491,7 +498,7 @@ def ejecutar_descompactar_facturas(host:str , port: int , username:str, password
     _logger.info(f"Archivos .zip: {conteo_archivos.zip_files}") 
     _logger.info(f"Archivos .rar: {conteo_archivos.rar_files}")
     
-    lista_archivos_copiar = filtrar_facturas_mes_vencido(conteo_archivos)
+    lista_archivos_copiar = lista_archivos_copiar_1
     destino_descarga = "archivos_descargados"
     direccion_destino_descarga = Path.cwd() / destino_descarga
     direccion_destino_descarga.mkdir(parents=True, exist_ok=True)

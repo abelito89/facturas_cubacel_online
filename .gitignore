@@ -3,3 +3,4 @@ venv_cubacel/
 __pycache__/
 archivos_descargados/
 sftp_test/
+logs/
