@@ -9,7 +9,7 @@ FACTURAS_CUBACEL_ONLINE/
 │
 ├── .env
 ├── .gitignore
-├── email_sender.py
+├── script_cubacel_online.py
 ├── functions.py
 ├── main.py
 ├── README.md
@@ -27,7 +27,7 @@ FACTURAS_CUBACEL_ONLINE/
 
 - **.env**: Archivo de configuración de entorno con las variables necesarias para la conexión SFTP.
 - **.gitignore**: Especifica los archivos y directorios que deben ser ignorados por Git.
-- **email_sender.py**: Script para enviar correos electrónicos.
+- **script_cubacel_online.py**: Script para ejecutar el proceso sin correr la API.
 - **functions.py**: Contiene todas las funciones utilizadas por la API.
 - **main.py**: Archivo principal que inicia la aplicación FastAPI.
 - **README.md**: Este archivo, que proporciona una descripción general del proyecto y las instrucciones para su uso.

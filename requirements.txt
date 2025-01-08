@@ -4,4 +4,3 @@ python-dotenv
 paramiko
 zipfile36
 rarfile
-pyftpdlib
