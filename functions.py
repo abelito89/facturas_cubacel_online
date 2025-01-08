@@ -8,7 +8,6 @@ from pathlib import Path
 import zipfile
 import rarfile
 import tarfile
-from email_sender import send_email
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -190,12 +189,6 @@ def descargar_archivos_sftp(conteo_archivos: ConteoArchivos, host: str, port: in
     _logger.info("Cerrando conexión SFTP")
     sftp.close()
     transport.close()
-    # Envio de correo de notificacion
-    to_email = os.getenv("TO_EMAIL")
-    subject = "Prueba"
-    body = "prueba"
-    send_email(to_email, subject, body)
-    print()
     
 
 def descomprimir_zip(file_path: Path, output_dir: Path) -> None:
@@ -432,12 +425,26 @@ def subir_carpeta_a_sftp(host: str, port: int, username: str, password: str, car
                 sftp.stat(remote_directory_path).st_mode 
                 
                 # Subir el archivo PDF al SFTP
-                sftp.put(str(pdf_file), remote_file_path)
-                _logger.info(f"Archivo {pdf_file} subido a {remote_file_path}")
-                cantidad_de_copiados += 1
+                
+                try:
+                    remote_file_stat = sftp.stat(remote_file_path)
+                    remote_file_size = remote_file_stat.st_size
+                    local_file_size = pdf_file.stat().st_size
+
+                    if remote_file_size == local_file_size:
+                        _logger.info(f"Archivo {remote_file_path} ya existe y tiene el mismo tamaño, omitiendo...")
+                    else:
+                        sftp.put(str(pdf_file), remote_file_path)
+                        _logger.info(f"Archivo {pdf_file} subido a {remote_file_path}")
+                        cantidad_de_copiados += 1
+                except FileNotFoundError:
+                    sftp.put(str(pdf_file), remote_file_path)
+                    _logger.info(f"Archivo {pdf_file} subido a {remote_file_path}")
+                    cantidad_de_copiados += 1
+
             sftp.close()
             transport.close()
-            _logger.info(f"Carpeta subida exitosamente con {cantidad_de_copiados} copiados existosamente")
+            _logger.info(f"Carpeta subida exitosamente con {cantidad_de_copiados} copiados correctamente")
         except IOError as e:
             _logger.error(f"Error al subir la carpeta: {e}")
         except Exception as e:
