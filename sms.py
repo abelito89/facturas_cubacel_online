@@ -3,18 +3,9 @@ from typing import List, Optional
 import logging
 from pathlib import Path
 
-dir_log = Path("logs") / f"log_facturas_cubacel_online.log"
-
 # Configuracion del nivel de logging y de generacion del archivo .log
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-                    handlers=[logging.FileHandler(dir_log), logging.StreamHandler()]
-                    )
+logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 _logger = logging.getLogger(__name__)
-
-proxies = {
-    "http": "http://abel.gomez:Diciembre*2024@192.168.91.20:3128",
-    "https": "http://abel.gomez:Diciembre*2024@192.168.91.20:3128"
-    }
 
 # Paso 1: Autenticación para obtener el token
 def obtener_token_servidor_sms(auth_url:str,username:str,password:str) -> Optional[str]:

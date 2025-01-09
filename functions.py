@@ -12,12 +12,40 @@ from dotenv import load_dotenv
 from sms import obtener_token_servidor_sms, envio_sms
 
 load_dotenv()
-dir_log = Path("logs") / f"log_facturas_cubacel_online.log"
+
+def fecha_mes_vencido() -> str:
+    """
+    Calcula y devuelve la fecha del mes anterior en formato 'YYYYMM'. 
+    Returns: 
+        str: Una cadena representando el mes vencido en formato 'YYYYMM'.
+    """
+    # Obtener el mes y año actuales
+    ahora = datetime.now()
+    anho_actual = ahora.year
+    mes_actual = ahora.month
+    
+    # Calcular el mes y año del mes vencido
+    mes_vencido = mes_actual - 1
+    if mes_vencido == 0:
+        mes_vencido = 12
+        anho_vencido = anho_actual - 1
+    else:
+        anho_vencido = anho_actual
+    fecha_vencida = str(anho_vencido)+str(mes_vencido)
+    return fecha_vencida
+
+fecha_nombre_log = fecha_mes_vencido()
+
+dir_log = Path("logs") / f"{fecha_nombre_log}_log_facturas_cubacel_online.log"
 
 # Configuracion del nivel de logging y de generacion del archivo .log
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
                     handlers=[logging.FileHandler(dir_log), logging.StreamHandler()]
                     )
+
+# Configura el logger raíz (root logger) 
+# root_logger = logging.getLogger() 
+# root_logger.setLevel(logging.DEBUG)
 _logger = logging.getLogger(__name__)
 
 paramiko_logger = logging.getLogger("paramiko")
@@ -96,26 +124,7 @@ def read_from_sftp(host: str, port: int, username: str, password: str) -> Conteo
     return ConteoArchivos(tar_gz_files=archivos_tar_gz, zip_files=archivos_zip, rar_files=archivos_rar)
 
 
-def fecha_mes_vencido() -> str:
-    """
-    Calcula y devuelve la fecha del mes anterior en formato 'YYYYMM'. 
-    Returns: 
-        str: Una cadena representando el mes vencido en formato 'YYYYMM'.
-    """
-    # Obtener el mes y año actuales
-    ahora = datetime.now()
-    anho_actual = ahora.year
-    mes_actual = ahora.month
-    
-    # Calcular el mes y año del mes vencido
-    mes_vencido = mes_actual - 1
-    if mes_vencido == 0:
-        mes_vencido = 12
-        anho_vencido = anho_actual - 1
-    else:
-        anho_vencido = anho_actual
-    fecha_vencida = str(anho_vencido)+str(mes_vencido)
-    return fecha_vencida
+
 
 
 def extraer_fecha(nombre:str) -> str:
