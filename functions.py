@@ -9,9 +9,12 @@ import zipfile
 import rarfile
 import tarfile
 from dotenv import load_dotenv
+from sms import obtener_token_servidor_sms, envio_sms
 
 load_dotenv()
 dir_log = Path("logs") / f"log_facturas_cubacel_online.log"
+
+# Configuracion del nivel de logging y de generacion del archivo .log
 logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
                     handlers=[logging.FileHandler(dir_log), logging.StreamHandler()]
                     )
@@ -216,7 +219,7 @@ def descomprimir_zip(file_path: Path, output_dir: Path) -> None:
             # Verificar si todos los archivos ya están descomprimidos
             all_files_exist = all((output_dir / member).exists() for member in zip_ref.namelist())
             if all_files_exist:
-                _logger.info(f"El archivo ZIP: {file_path} ya esta descomprimido")
+                _logger.info(f"El archivo ZIP: {file_path} ya estaba descomprimido en esa ubicacion")
                 return  # Salir sin extraer nada
 
             # Extraer los archivos si no están descomprimidos
@@ -456,10 +459,14 @@ def subir_carpeta_a_sftp(host: str, port: int, username: str, password: str, car
                     print(f"Archivo {pdf_file} subido a {remote_file_path}")
                     cantidad_de_verificados += 1
                     cantidad_de_copiados += 1
-
             sftp.close()
             transport.close()
-            _logger.info(f"Carpeta subida exitosamente al sftp")
+            
+            if cantidad_de_copiados == cantidad_de_verificados:
+                _logger.info(f"Carpeta subida exitosamente al sftp")
+            else:
+                _logger.info(f"Ya la carpeta con las facturas se encontraban subidas al sftp")
+            
             _logger.info(f"Cantidad de archivos verificados: {cantidad_de_verificados}")
             _logger.info(f"Cantidad de archivos subidos al sftp: {cantidad_de_copiados}")
         except IOError as e:
@@ -492,11 +499,20 @@ def ejecutar_descompactar_facturas(host:str , port: int , username:str, password
         None
     """
     clear_console()
+    auth_url = os.getenv("AUTH_URL")
+    username_sms = os.getenv("USERNAME_SMS")
+    password_sms = os.getenv("PASSWORD_SMS")
+    sms_url = os.getenv("SMS_URL")
+    token = obtener_token_servidor_sms(auth_url, username_sms, password_sms)
+    mensaje_sms = "Comenzando procesamiento de facturas de Cubacel Online"
+    destinos = ["51368261","52888880"]
+    if token:
+        envio_sms(sms_url, token, mensaje_sms, destinos)
     conteo_archivos = read_from_sftp(host, port, username, password)
     print()
-    _logger.info(f"Archivos .tar.gz: {conteo_archivos.tar_gz_files}") 
-    _logger.info(f"Archivos .zip: {conteo_archivos.zip_files}") 
-    _logger.info(f"Archivos .rar: {conteo_archivos.rar_files}")
+    _logger.info(f"Lista de archivos .tar.gz encontrados: {conteo_archivos.tar_gz_files}") 
+    _logger.info(f"Lista de archivos .zip encontrados: {conteo_archivos.zip_files}") 
+    _logger.info(f"Lista de archivos .rar encontrados: {conteo_archivos.rar_files}")
     
     lista_archivos_copiar = lista_archivos_copiar_1
     destino_descarga = "archivos_descargados"
