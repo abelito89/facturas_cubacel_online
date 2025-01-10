@@ -10,6 +10,7 @@ import rarfile
 import tarfile
 from dotenv import load_dotenv
 from sms import obtener_token_servidor_sms, envio_sms
+from log_configuration import configurar_logging
 
 load_dotenv()
 
@@ -31,25 +32,11 @@ def fecha_mes_vencido() -> str:
         anho_vencido = anho_actual - 1
     else:
         anho_vencido = anho_actual
-    fecha_vencida = str(anho_vencido)+str(mes_vencido)
+    fecha_vencida = str(anho_vencido)+str(mes_vencido).zfill(2)
     return fecha_vencida
 
-fecha_nombre_log = fecha_mes_vencido()
-
-dir_log = Path("logs") / f"{fecha_nombre_log}_log_facturas_cubacel_online.log"
-
-# Configuracion del nivel de logging y de generacion del archivo .log
-logging.basicConfig(level=logging.DEBUG, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-                    handlers=[logging.FileHandler(dir_log), logging.StreamHandler()]
-                    )
-
-# Configura el logger raíz (root logger) 
-# root_logger = logging.getLogger() 
-# root_logger.setLevel(logging.DEBUG)
+# Obtener un logger para este módulo
 _logger = logging.getLogger(__name__)
-
-paramiko_logger = logging.getLogger("paramiko")
-paramiko_logger.setLevel(logging.WARNING)
 
 # Declaración de la variable global 
 lista_archivos_copiar_1 = []
@@ -156,9 +143,9 @@ def filtrar_facturas_mes_vencido(conteo_archivos: ConteoArchivos) -> List[str]:
         print()
         for archivo in archivos:
             print()
-            _logger.info(f"Archivo: {archivo}")
+            _logger.info(f"Archivo: {archivo} encontrado en el sftp")
             if extraer_fecha(archivo) == fecha_vencida:
-                _logger.info(f"Fecha del archivo: {extraer_fecha(archivo)}")
+                _logger.info(f"Fecha del encontrada en el nombre del archivo: {extraer_fecha(archivo)}")
                 _logger.info(f"Fecha del mes vencido: {fecha_vencida}")
                 lista_archivos_copiar.append(archivo)
     print()
@@ -169,7 +156,7 @@ def filtrar_facturas_mes_vencido(conteo_archivos: ConteoArchivos) -> List[str]:
 
 
 def descargar_archivos_sftp(conteo_archivos: ConteoArchivos, host: str, port: int, username: str, password: str, lista_archivos_copiar: List[str], destino: str) -> None:
-    global lista_archivos_copiar_1
+
     """
     Descarga archivos desde un servidor SFTP cuyos nombres coincidan con los de una lista dada.
 
@@ -184,30 +171,36 @@ def descargar_archivos_sftp(conteo_archivos: ConteoArchivos, host: str, port: in
     Returns:
         None
     """
-    # Crear el cliente SFTP
-    _logger.info("Estableciendo conexion SFTP")
-    sftp, transport = cliente_sft(host, port, username, password)
-    
-    lista_archivos_copiar_1 = filtrar_facturas_mes_vencido(conteo_archivos)
+    try:
+        _logger.info(f"Entrando en la funcion de descarga")
+        global lista_archivos_copiar_1
+        # Crear el cliente SFTP
+        _logger.info("Estableciendo conexion SFTP para descarga")
+        sftp, transport = cliente_sft(host, port, username, password)
         
-    # Descargar los archivos que coinciden con los nombres en la lista
-    for archivo in lista_archivos_copiar:
-        remote_file_path = Path(archivo)
-        local_file_path = Path.cwd() / destino / archivo
-                    
-        if local_file_path.exists():
-            _logger.warning(f"El archivo ya existe en el directorio de descarga, se omite dicha descarga: {local_file_path}")
-            continue
-        try:
+        lista_archivos_copiar_1 = filtrar_facturas_mes_vencido(conteo_archivos)
+            
+        # Descargar los archivos que coinciden con los nombres en la lista
+        for archivo in lista_archivos_copiar_1:
+            remote_file_path = Path(archivo)
+            local_file_path = Path.cwd() / destino / archivo
+                        
+            if local_file_path.exists():
+                _logger.warning(f"El archivo ya existe en el directorio de descarga, se omite dicha descarga: {local_file_path}")
+                continue
+            try:
 
-            _logger.info(f"Descargando archivo: {archivo}")
-            sftp.get(str(remote_file_path), str(local_file_path))
-            _logger.info(f"{archivo} descargado satisfactoriamente")
-        except Exception as e:
-            _logger.error(f"Error descargando el archivo: {archivo}")
+                _logger.info(f"Descargando archivo: {archivo}")
+                sftp.get(str(remote_file_path), str(local_file_path))
+                _logger.info(f"{archivo} descargado satisfactoriamente")
+            except Exception as e:
+                _logger.error(f"Error descargando el archivo: {archivo}")
+    except Exception as e:
+        _logger.error(f"Error en descargar_archivos_sftp: {e}") 
+        print(f"Error: {e}")
     
     # Cerrar la conexión SFTP
-    _logger.info("Cerrando conexion SFTP")
+    _logger.info("Cerrando conexion SFTP debido a terminacion del proceso de descarga")
     sftp.close()
     transport.close()
     
@@ -310,6 +303,8 @@ def descomprimir_archivos(directorio: str) -> str:
     # Verificar que el directorio existe
     if not dir_path.exists() or not dir_path.is_dir():
         raise FileNotFoundError(f"El directorio {directorio} no existe o no es un directorio valido")
+    
+    output_dir_name = None
 
     # Recorrer todos los archivos en el directorio
     for file_path in dir_path.iterdir():
@@ -330,7 +325,11 @@ def descomprimir_archivos(directorio: str) -> str:
                 descomprimir_tar_gz(file_path, output_dir)  # Usar output_dir
         else:
             _logger.warning(f"Tipo de archivo no soportado: {file_path}")
-    return output_dir_name
+    
+    if output_dir_name:
+        return output_dir_name
+    else:
+        raise ValueError("No se encontraron archivos comprimidos válidos en el directorio")
             
 
 def eliminar_comprimidos(directorio: str) -> None:
@@ -507,7 +506,13 @@ def ejecutar_descompactar_facturas(host:str , port: int , username:str, password
     Returns: 
         None
     """
+    # Llamar a la configuración global
     clear_console()
+    fecha_mes_vencido_log = fecha_mes_vencido()
+    configurar_logging(fecha_mes_vencido_log)
+    
+
+    _logger.info("Configuración de logging completada.")
     auth_url = os.getenv("AUTH_URL")
     username_sms = os.getenv("USERNAME_SMS")
     password_sms = os.getenv("PASSWORD_SMS")
