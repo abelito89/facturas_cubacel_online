@@ -35,8 +35,9 @@ def fecha_mes_vencido() -> str:
     fecha_vencida = str(anho_vencido)+str(mes_vencido).zfill(2)
     return fecha_vencida
 
-# Obtener un logger para este módulo
+# Obtener loggers para este módulo
 _logger = logging.getLogger(__name__)
+_logger_simple = logging.getLogger("simple")
 
 # Declaración de la variable global 
 lista_archivos_copiar_1 = []
@@ -111,9 +112,6 @@ def read_from_sftp(host: str, port: int, username: str, password: str) -> Conteo
     return ConteoArchivos(tar_gz_files=archivos_tar_gz, zip_files=archivos_zip, rar_files=archivos_rar)
 
 
-
-
-
 def extraer_fecha(nombre:str) -> str:
     """
     Extrae y devuelve el año y mes desde el nombre de un archivo.
@@ -143,13 +141,15 @@ def filtrar_facturas_mes_vencido(conteo_archivos: ConteoArchivos) -> List[str]:
         print()
         for archivo in archivos:
             print()
-            _logger.info(f"Archivo: {archivo} encontrado en el sftp")
+            print(f"Archivo: {archivo} encontrado en el sftp")
             if extraer_fecha(archivo) == fecha_vencida:
-                _logger.info(f"Fecha del encontrada en el nombre del archivo: {extraer_fecha(archivo)}")
-                _logger.info(f"Fecha del mes vencido: {fecha_vencida}")
+                print(f"Fecha del encontrada en el nombre del archivo: {extraer_fecha(archivo)}")
+                print(f"Fecha del mes vencido: {fecha_vencida}")
                 lista_archivos_copiar.append(archivo)
     print()
-    _logger.info(f"Lista final: {lista_archivos_copiar}")
+    _logger.info(f"Lista de archivos comprimidos con facturas:")
+    for index,file in enumerate(lista_archivos_copiar, start=1):    
+        _logger.info(f"{index}. {file}")
     print()
     return lista_archivos_copiar
 
@@ -172,7 +172,7 @@ def descargar_archivos_sftp(conteo_archivos: ConteoArchivos, host: str, port: in
         None
     """
     try:
-        _logger.info(f"Entrando en la funcion de descarga")
+        print(f"Entrando en la funcion de descarga")
         global lista_archivos_copiar_1
         # Crear el cliente SFTP
         _logger.info("Estableciendo conexion SFTP para descarga")
@@ -473,7 +473,7 @@ def subir_carpeta_a_sftp(host: str, port: int, username: str, password: str, car
             if cantidad_de_copiados == cantidad_de_verificados:
                 _logger.info(f"Carpeta subida exitosamente al sftp")
             else:
-                _logger.info(f"Ya la carpeta con las facturas se encontraban subidas al sftp")
+                _logger.info(f"Ya la carpeta con las facturas se encontraba subida al sftp")
             
             _logger.info(f"Cantidad de archivos verificados: {cantidad_de_verificados}")
             _logger.info(f"Cantidad de archivos subidos al sftp: {cantidad_de_copiados}")
@@ -507,12 +507,12 @@ def ejecutar_descompactar_facturas(host:str , port: int , username:str, password
         None
     """
     # Llamar a la configuración global
-    clear_console()
+    # clear_console()
     fecha_mes_vencido_log = fecha_mes_vencido()
     configurar_logging(fecha_mes_vencido_log)
-    
-
-    _logger.info("Configuración de logging completada.")
+    _logger_simple.info(f"************************************************************************")
+    _logger.info(f"Iniciando el proceso de busqueda de facturas comprimidas en el sftp")
+    _logger_simple.info(f"************************************************************************")
     auth_url = os.getenv("AUTH_URL")
     username_sms = os.getenv("USERNAME_SMS")
     password_sms = os.getenv("PASSWORD_SMS")
@@ -534,5 +534,6 @@ def ejecutar_descompactar_facturas(host:str , port: int , username:str, password
     direccion_destino_descarga.mkdir(parents=True, exist_ok=True)
     descargar_archivos_sftp(conteo_archivos, host, port, username, password, lista_archivos_copiar, direccion_destino_descarga)
     carpeta_buscar = descomprimir_archivos(direccion_destino_descarga)
-    subir_carpeta_a_sftp(host, port, username, password, destino_descarga, carpeta_buscar) 
+    subir_carpeta_a_sftp(host, port, username, password, destino_descarga, carpeta_buscar)
     # eliminar_comprimidos(direccion_destino_descarga)
+    _logger.info(f"Proceso finalizado, facturas de Cubacel Online subidas exitosamente al sftp")
