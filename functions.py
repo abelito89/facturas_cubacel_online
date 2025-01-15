@@ -10,7 +10,7 @@ import rarfile
 import tarfile
 from dotenv import load_dotenv
 from sms import obtener_token_servidor_sms, envio_sms
-from log_configuration import configurar_logging
+from log_configuration import configurar_logging, configurar_separador
 
 load_dotenv()
 
@@ -36,8 +36,9 @@ def fecha_mes_vencido() -> str:
     return fecha_vencida
 
 # Obtener loggers para este módulo
-_logger = logging.getLogger(__name__)
-_logger_simple = logging.getLogger("simple")
+fecha_mes_vencido_log = fecha_mes_vencido()
+_logger = configurar_logging(fecha_mes_vencido_log)
+_logger_simple = configurar_separador(fecha_mes_vencido_log)
 
 # Declaración de la variable global 
 lista_archivos_copiar_1 = []
@@ -508,8 +509,7 @@ def ejecutar_descompactar_facturas(host:str , port: int , username:str, password
     """
     # Llamar a la configuración global
     # clear_console()
-    fecha_mes_vencido_log = fecha_mes_vencido()
-    configurar_logging(fecha_mes_vencido_log)
+
     _logger_simple.info(f"************************************************************************")
     _logger.info(f"Iniciando el proceso de busqueda de facturas comprimidas en el sftp")
     _logger_simple.info(f"************************************************************************")
