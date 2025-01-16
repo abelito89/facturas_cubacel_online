@@ -37,8 +37,8 @@ def fecha_mes_vencido() -> str:
 
 # Obtener loggers para este módulo
 fecha_mes_vencido_log = fecha_mes_vencido()
-_logger = configurar_logging(fecha_mes_vencido_log)
-_logger_simple = configurar_separador(fecha_mes_vencido_log)
+_logger, log_file = configurar_logging(fecha_mes_vencido_log, __name__)
+_logger_simple = configurar_separador(log_file)
 
 # Declaración de la variable global 
 lista_archivos_copiar_1 = []
@@ -148,7 +148,7 @@ def filtrar_facturas_mes_vencido(conteo_archivos: ConteoArchivos) -> List[str]:
                 print(f"Fecha del mes vencido: {fecha_vencida}")
                 lista_archivos_copiar.append(archivo)
     print()
-    _logger.info(f"Lista de archivos comprimidos con facturas:")
+    _logger.info(f"Lista total de archivos comprimidos con facturas:")
     for index,file in enumerate(lista_archivos_copiar, start=1):    
         _logger.info(f"{index}. {file}")
     print()
@@ -510,9 +510,9 @@ def ejecutar_descompactar_facturas(host:str , port: int , username:str, password
     # Llamar a la configuración global
     # clear_console()
 
-    _logger_simple.info(f"************************************************************************")
+    _logger_simple.info(f"**********************************************************************************************************************************")
     _logger.info(f"Iniciando el proceso de busqueda de facturas comprimidas en el sftp")
-    _logger_simple.info(f"************************************************************************")
+    _logger_simple.info(f"**********************************************************************************************************************************")
     auth_url = os.getenv("AUTH_URL")
     username_sms = os.getenv("USERNAME_SMS")
     password_sms = os.getenv("PASSWORD_SMS")
