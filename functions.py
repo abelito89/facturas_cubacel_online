@@ -1,7 +1,6 @@
 import paramiko
 from schemas.schemas import ConteoArchivos
 from datetime import datetime
-import logging
 from typing import List, Tuple
 import os
 from pathlib import Path
@@ -65,7 +64,7 @@ def clear_console() -> None:
 import paramiko
 from typing import Tuple
 
-def cliente_sft(host: str, port: int, username: str, password: str) -> Tuple[paramiko.SFTPClient, paramiko.Transport]:
+def cliente_sftp(host: str, port: int, username: str, password: str) -> Tuple[paramiko.SFTPClient, paramiko.Transport]:
     """
     Establece una conexion SFTP y retorna el cliente y el transporte.
 
@@ -78,10 +77,21 @@ def cliente_sft(host: str, port: int, username: str, password: str) -> Tuple[par
     Returns:
         Tuple[paramiko.SFTPClient, paramiko.Transport]: Cliente SFTP y transporte SFTP.
     """
-    transport = paramiko.Transport((host, port))
-    transport.connect(username=username, password=password)
-    sftp = paramiko.SFTPClient.from_transport(transport)
+    try:
+        transport = paramiko.Transport((host, port))
+        transport.connect(username=username, password=password)
+        sftp = paramiko.SFTPClient.from_transport(transport)
+    except paramiko.ssh_exception.AuthenticationException:
+        _logger.error(f"Fallo de autenticacion")
+        sftp = None
+        transport = None
     return sftp, transport
+
+
+'''def cliente_sftp(host: str, port: int, username: str, password: str):
+    sftp = None
+    transport = None
+    return sftp, transport'''
 
 
 def read_from_sftp(host: str, port: int, username: str, password: str) -> ConteoArchivos:
@@ -97,7 +107,9 @@ def read_from_sftp(host: str, port: int, username: str, password: str) -> Conteo
     Returns:
         ConteoArchivos: Objeto que contiene listas de archivos .tar.gz, .zip y .rar.
     """
-    sftp, transport = cliente_sft(host, port, username, password)
+    sftp, transport = cliente_sftp(host, port, username, password)
+    if not sftp or not transport:
+        return None
 
     # Listar todos los archivos en el directorio remoto
     archivos = sftp.listdir()
@@ -177,7 +189,7 @@ def descargar_archivos_sftp(conteo_archivos: ConteoArchivos, host: str, port: in
         global lista_archivos_copiar_1
         # Crear el cliente SFTP
         _logger.info("Estableciendo conexion SFTP para descarga")
-        sftp, transport = cliente_sft(host, port, username, password)
+        sftp, transport = cliente_sftp(host, port, username, password)
         
         lista_archivos_copiar_1 = filtrar_facturas_mes_vencido(conteo_archivos)
             
@@ -307,30 +319,35 @@ def descomprimir_archivos(directorio: str) -> str:
     
     output_dir_name = None
 
+    archivos_comprimidos = [
+        file for file in dir_path.iterdir()
+        if file.suffix in ('.zip', '.rar') or file.name.endswith('.tar.gz')
+    ]
+    
+    if not archivos_comprimidos:
+        _logger.warning("No hay archivos comprimidos válidos para descomprimir.")
+        return None  # No lanzar error, retornar None
+
     # Recorrer todos los archivos en el directorio
-    for file_path in dir_path.iterdir():
-        if file_path.suffix in ['.zip', '.rar'] or file_path.name.endswith('.tar.gz'):
-            # Tomar los primeros 6 caracteres del nombre del archivo
-            output_dir_name = file_path.name[:6]
-            output_dir = dir_path / output_dir_name
+    for file_path in archivos_comprimidos:
+        # Tomar los primeros 6 caracteres del nombre del archivo
+        output_dir_name = file_path.name[:6]
+        output_dir = dir_path / output_dir_name
 
-            # Crear el directorio de salida si no existe
-            output_dir.mkdir(parents=True, exist_ok=True)
+        # Crear el directorio de salida si no existe
+        output_dir.mkdir(parents=True, exist_ok=True)
 
-            # Llamar a la función adecuada para descomprimir
-            if file_path.suffix == '.zip':
-                descomprimir_zip(file_path, output_dir)  # Usar output_dir
-            elif file_path.suffix == '.rar':
-                descomprimir_rar(file_path, output_dir)  # Usar output_dir
-            elif file_path.name.endswith('.tar.gz') or file_path.suffix in ['.tar.gz', '.tgz']:
-                descomprimir_tar_gz(file_path, output_dir)  # Usar output_dir
+        # Llamar a la función adecuada para descomprimir
+        if file_path.suffix == '.zip':
+            descomprimir_zip(file_path, output_dir)  # Usar output_dir
+        elif file_path.suffix == '.rar':
+            descomprimir_rar(file_path, output_dir)  # Usar output_dir
+        elif file_path.name.endswith('.tar.gz') or file_path.suffix in ['.tar.gz', '.tgz']:
+            descomprimir_tar_gz(file_path, output_dir)  # Usar output_dir
         else:
             _logger.warning(f"Tipo de archivo no soportado: {file_path}")
-    
-    if output_dir_name:
+
         return output_dir_name
-    else:
-        raise ValueError("No se encontraron archivos comprimidos válidos en el directorio")
             
 
 def eliminar_comprimidos(directorio: str) -> None:
@@ -384,7 +401,11 @@ def subir_carpeta_a_sftp(host: str, port: int, username: str, password: str, car
     Returns: 
         None
     """
-    sftp, transport = cliente_sft(host, port, username, password)
+    sftp, transport = cliente_sftp(host, port, username, password)
+
+    if sftp is None or transport is None:
+        _logger.error("No se pudo establecer la conexión SFTP. Abortando subida.")
+        return  # Salir de la función
     
     carpeta_local_path = Path(carpeta_local)
     
@@ -478,6 +499,7 @@ def subir_carpeta_a_sftp(host: str, port: int, username: str, password: str, car
             
             _logger.info(f"Cantidad de archivos verificados: {cantidad_de_verificados}")
             _logger.info(f"Cantidad de archivos subidos al sftp: {cantidad_de_copiados}")
+            _logger.info(f"Proceso finalizado, facturas de Cubacel Online subidas exitosamente al sftp")
         except IOError as e:
             _logger.error(f"Error al subir la carpeta: {e}")
         except Exception as e:
@@ -523,17 +545,27 @@ def ejecutar_descompactar_facturas(host:str , port: int , username:str, password
     if token:
         envio_sms(sms_url, token, mensaje_sms, destinos)
     conteo_archivos = read_from_sftp(host, port, username, password)
-    print()
-    _logger.info(f"Lista de archivos .tar.gz encontrados: {conteo_archivos.tar_gz_files}") 
-    _logger.info(f"Lista de archivos .zip encontrados: {conteo_archivos.zip_files}") 
-    _logger.info(f"Lista de archivos .rar encontrados: {conteo_archivos.rar_files}")
-    
-    lista_archivos_copiar = lista_archivos_copiar_1
+    lista_archivos_copiar = []
+
+    if conteo_archivos is None:
+        _logger.error("No se pudo leer el SFTP. Continuando con descompresión de archivos locales (si existen).")
+    else:
+        _logger.info(f"Lista de archivos .tar.gz encontrados: {conteo_archivos.tar_gz_files}") 
+        _logger.info(f"Lista de archivos .zip encontrados: {conteo_archivos.zip_files}") 
+        _logger.info(f"Lista de archivos .rar encontrados: {conteo_archivos.rar_files}")
+        lista_archivos_copiar = lista_archivos_copiar_1
+
+    # Crear carpeta de descarga (si no existe)
     destino_descarga = "archivos_descargados"
     direccion_destino_descarga = Path.cwd() / destino_descarga
     direccion_destino_descarga.mkdir(parents=True, exist_ok=True)
-    descargar_archivos_sftp(conteo_archivos, host, port, username, password, lista_archivos_copiar, direccion_destino_descarga)
+
+    # Descargar archivos SOLO si conteo_archivos no es None
+    if conteo_archivos is not None:
+        descargar_archivos_sftp(conteo_archivos, host, port, username, password, lista_archivos_copiar, direccion_destino_descarga)
+    else:
+        _logger.warning("No se descargaron archivos del SFTP (conteo_archivos es None).")
+
+    # Descomprimir y subir (aunque no haya archivos nuevos)
     carpeta_buscar = descomprimir_archivos(direccion_destino_descarga)
     subir_carpeta_a_sftp(host, port, username, password, destino_descarga, carpeta_buscar)
-    # eliminar_comprimidos(direccion_destino_descarga)
-    _logger.info(f"Proceso finalizado, facturas de Cubacel Online subidas exitosamente al sftp")

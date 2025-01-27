@@ -5,3 +5,4 @@ paramiko
 zipfile36
 rarfile
 requests
+exceptiongroup>=1.0.2
