@@ -61,12 +61,11 @@ def clear_console() -> None:
     print()
 
 
-import paramiko
-from typing import Tuple
-
 def cliente_sftp(host: str, port: int, username: str, password: str) -> Tuple[paramiko.SFTPClient, paramiko.Transport]:
     """
-    Establece una conexion SFTP y retorna el cliente y el transporte.
+    Establece una conexión SFTP y retorna el cliente y el transporte.
+
+    En caso de fallo de autenticación, retorna (None, None). Otras excepciones relacionadas con la conexión pueden propagarse.
 
     Args:
         host (str): Dirección del servidor SFTP.
@@ -75,7 +74,12 @@ def cliente_sftp(host: str, port: int, username: str, password: str) -> Tuple[pa
         password (str): Contraseña para el acceso SFTP.
 
     Returns:
-        Tuple[paramiko.SFTPClient, paramiko.Transport]: Cliente SFTP y transporte SFTP.
+        Tuple[paramiko.SFTPClient, paramiko.Transport]: 
+            Cliente SFTP y transporte SFTP. Si la autenticación falla, ambos elementos serán None.
+
+    Raises:
+        paramiko.ssh_exception.SSHException: Si ocurre un error durante la conexión que no sea de autenticación.
+        Exception: Errores generales de conexión (ej. problemas de red, puerto incorrecto).
     """
     try:
         transport = paramiko.Transport((host, port))
@@ -86,12 +90,6 @@ def cliente_sftp(host: str, port: int, username: str, password: str) -> Tuple[pa
         sftp = None
         transport = None
     return sftp, transport
-
-
-'''def cliente_sftp(host: str, port: int, username: str, password: str):
-    sftp = None
-    transport = None
-    return sftp, transport'''
 
 
 def read_from_sftp(host: str, port: int, username: str, password: str) -> ConteoArchivos:
@@ -272,7 +270,6 @@ def descomprimir_rar(file_path: Path, output_dir: Path) -> None:
         _logger.error(f"Error al descomprimir el archivo RAR {file_path}: {e}")
 
 
-
 def descomprimir_tar_gz(file_path: Path, output_dir: Path) -> None:
     """
     Descomprime un archivo tar.gz y verifica si ya está descomprimido.
@@ -323,9 +320,9 @@ def descomprimir_archivos(directorio: str) -> str:
         file for file in dir_path.iterdir()
         if file.suffix in ('.zip', '.rar') or file.name.endswith('.tar.gz')
     ]
-    
+    print(f"***LISTA***:{archivos_comprimidos}")
     if not archivos_comprimidos:
-        _logger.warning("No hay archivos comprimidos válidos para descomprimir.")
+        _logger.warning("No hay archivos comprimidos validos para descomprimir.")
         return None  # No lanzar error, retornar None
 
     # Recorrer todos los archivos en el directorio
@@ -347,7 +344,7 @@ def descomprimir_archivos(directorio: str) -> str:
         else:
             _logger.warning(f"Tipo de archivo no soportado: {file_path}")
 
-        return output_dir_name
+    return output_dir_name
             
 
 def eliminar_comprimidos(directorio: str) -> None:
@@ -404,7 +401,7 @@ def subir_carpeta_a_sftp(host: str, port: int, username: str, password: str, car
     sftp, transport = cliente_sftp(host, port, username, password)
 
     if sftp is None or transport is None:
-        _logger.error("No se pudo establecer la conexión SFTP. Abortando subida.")
+        _logger.error("No se pudo establecer la conexion SFTP. Abortando subida.")
         return  # Salir de la función
     
     carpeta_local_path = Path(carpeta_local)
@@ -465,13 +462,12 @@ def subir_carpeta_a_sftp(host: str, port: int, username: str, password: str, car
         try:
             cantidad_de_copiados = 0
             cantidad_de_verificados = 0
-        # Iterar sobre todos los archivos PDF en la carpeta encontrada
+            # Iterar sobre todos los archivos PDF en la carpeta encontrada
             for pdf_file in carpeta_encontrada.glob('*.pdf'):
                 remote_file_path = f"{remote_directory_path}/{pdf_file.name}"                
                 sftp.stat(remote_directory_path).st_mode 
                 
                 # Subir el archivo PDF al SFTP
-                
                 try:
                     remote_file_stat = sftp.stat(remote_file_path)
                     remote_file_size = remote_file_stat.st_size
@@ -505,7 +501,7 @@ def subir_carpeta_a_sftp(host: str, port: int, username: str, password: str, car
         except Exception as e:
             _logger.error(f"Error inesperado al subir la carpeta: {e}")
     else:
-        _logger.warning(f"No se encontró la carpeta {carpeta_buscar} en la carpeta {carpeta_local}")
+        _logger.warning(f"No se encontro la carpeta {carpeta_buscar} en la carpeta {carpeta_local}")
         sftp.close()
         transport.close()
 
@@ -548,7 +544,7 @@ def ejecutar_descompactar_facturas(host:str , port: int , username:str, password
     lista_archivos_copiar = []
 
     if conteo_archivos is None:
-        _logger.error("No se pudo leer el SFTP. Continuando con descompresión de archivos locales (si existen).")
+        _logger.error("No se pudo leer el SFTP. Continuando con descompresion de archivos locales (si existen).")
     else:
         _logger.info(f"Lista de archivos .tar.gz encontrados: {conteo_archivos.tar_gz_files}") 
         _logger.info(f"Lista de archivos .zip encontrados: {conteo_archivos.zip_files}") 
