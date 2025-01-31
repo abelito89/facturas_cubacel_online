@@ -13,6 +13,7 @@ from log_configuration import configurar_logging, configurar_separador
 
 load_dotenv()
 
+
 def fecha_mes_vencido() -> str:
     """
     Calcula y devuelve la fecha del mes anterior en formato 'YYYYMM'. 
@@ -61,36 +62,56 @@ def clear_console() -> None:
     print()
 
 
-def cliente_sftp(host: str, port: int, username: str, password: str) -> Tuple[paramiko.SFTPClient, paramiko.Transport]:
+def cliente_sftp(host: str, port: int, username: str, password: str) -> Tuple[paramiko.SFTPClient, paramiko.SSHClient]:
     """
-    Establece una conexión SFTP y retorna el cliente y el transporte.
-
-    En caso de fallo de autenticación, retorna (None, None). Otras excepciones relacionadas con la conexión pueden propagarse.
+    Establece una conexión SFTP a un servidor remoto utilizando autenticación por contraseña.
 
     Args:
-        host (str): Dirección del servidor SFTP.
-        port (int): Puerto del servidor SFTP.
-        username (str): Nombre de usuario para el acceso SFTP.
-        password (str): Contraseña para el acceso SFTP.
+        host (str): La dirección IP o nombre del host del servidor SFTP.
+        port (int): El puerto para conectarse al servidor SFTP.
+        username (str): El nombre de usuario para la autenticación SFTP.
+        password (str): La contraseña para la autenticación SFTP.
 
     Returns:
-        Tuple[paramiko.SFTPClient, paramiko.Transport]: 
-            Cliente SFTP y transporte SFTP. Si la autenticación falla, ambos elementos serán None.
+        Tuple[paramiko.SFTPClient, paramiko.SSHClient]:
+            - paramiko.SFTPClient: Una instancia del cliente SFTP conectada al servidor.
+            - paramiko.SSHClient: Una instancia del cliente SSH utilizado para la conexión.
 
-    Raises:
-        paramiko.ssh_exception.SSHException: Si ocurre un error durante la conexión que no sea de autenticación.
-        Exception: Errores generales de conexión (ej. problemas de red, puerto incorrecto).
+    Exceptions:
+        paramiko.AuthenticationException: Si la autenticación con el servidor falla.
+        Exception: Si ocurre cualquier otro error durante la conexión.
+
+    Ejemplo de uso:
+        sftp, client = cliente_sftp('example.com', 22, 'usuario', 'contraseña')
+        if sftp and client:
+            print("Conexión SFTP establecida con éxito")
+            # Aquí puedes realizar las operaciones SFTP necesarias
+            sftp.close()
+            client.close()
+
     """
+    
+    sftp = None
+    
     try:
-        transport = paramiko.Transport((host, port))
-        transport.connect(username=username, password=password)
-        sftp = paramiko.SFTPClient.from_transport(transport)
-    except paramiko.ssh_exception.AuthenticationException:
-        _logger.error(f"Fallo de autenticacion")
-        sftp = None
-        transport = None
-    return sftp, transport
+        # Crear un cliente SSH
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
+        # Conectar al servidor utilizando contraseña
+        client.connect(hostname=host, port=port, username=username, password=password)
+
+        # Crear cliente SFTP
+        sftp = client.open_sftp()
+        return sftp, client
+
+    except paramiko.AuthenticationException as e:
+        print(f"Fallo de autenticación: {e}")
+        return None, None
+    except Exception as e:
+        print(f"Error general: {e}")
+        return None, None
+            
 
 def read_from_sftp(host: str, port: int, username: str, password: str) -> ConteoArchivos:
     """
@@ -105,6 +126,8 @@ def read_from_sftp(host: str, port: int, username: str, password: str) -> Conteo
     Returns:
         ConteoArchivos: Objeto que contiene listas de archivos .tar.gz, .zip y .rar.
     """
+    _logger.info(f"ENTRANDO A READ FROM SFTP")
+ 
     sftp, transport = cliente_sftp(host, port, username, password)
     if not sftp or not transport:
         return None
@@ -320,7 +343,6 @@ def descomprimir_archivos(directorio: str) -> str:
         file for file in dir_path.iterdir()
         if file.suffix in ('.zip', '.rar') or file.name.endswith('.tar.gz')
     ]
-    print(f"***LISTA***:{archivos_comprimidos}")
     if not archivos_comprimidos:
         _logger.warning("No hay archivos comprimidos validos para descomprimir.")
         return None  # No lanzar error, retornar None
@@ -506,24 +528,39 @@ def subir_carpeta_a_sftp(host: str, port: int, username: str, password: str, car
         transport.close()
 
 
-def ejecutar_descompactar_facturas(host:str , port: int , username:str, password) -> None:
+def ejecutar_descompactar_facturas(host:str , port: int , username_sftp:str, password) -> None:
     """
-    Realiza el proceso de descompactación y subida de facturas a un servidor SFTP. 
-    Este proceso incluye: 
-    1. Limpiar la consola. 
-    2. Leer archivos desde el servidor SFTP. 
-    3. Filtrar facturas del mes vencido. 
-    4. Descargar archivos filtrados desde el servidor SFTP. 
-    5. Descomprimir los archivos descargados. 
-    6. Subir la carpeta descomprimida al servidor SFTP.
+    Realiza el proceso completo de gestión de facturas comprimidas en un servidor SFTP.
     
-    Args: 
-        host (str): Dirección del servidor SFTP. 
-        port (int): Puerto del servidor SFTP. 
-        username (str): Nombre de usuario para el acceso SFTP. 
-        password (str): Contraseña para el acceso SFTP. 
-    Returns: 
-        None
+    El flujo incluye:
+    1. Conexión al servidor SFTP y listado de archivos comprimidos
+    2. Notificación por SMS del inicio del proceso
+    3. Descarga de archivos (continúa con archivos locales si falla la descarga)
+    4. Descompresión de archivos
+    5. Re-upload de archivos procesados al servidor SFTP
+    6. Manejo de errores parciales con continuidad del proceso
+
+    Args:
+        host (str): Dirección del servidor SFTP
+        port (int): Puerto del servidor SFTP
+        username (str): Nombre de usuario para autenticación SFTP
+        password (str): Contraseña para autenticación SFTP
+
+    Returns:
+        None: La función no retorna valores pero tiene efectos secundarios:
+            - Envía notificaciones por SMS
+            - Crea/actualiza el directorio 'archivos_descargados'
+            - Modifica el estado del servidor SFTP
+
+    Raises:
+        paramiko.ssh_exception.SSHException: Para errores generales de conexión SFTP
+        OSError: Para problemas en operaciones de archivo locales
+        Exception: Para fallos inesperados en subprocesos críticos
+
+    Notas:
+        - Utiliza variables de entorno para configuración sensible (SMS, credenciales)
+        - Funciona en modo resiliente: continua el proceso aunque falle alguna subetapa
+        - Requiere Python 3.8+ por el uso de pathlib y type hints avanzados
     """
     # Llamar a la configuración global
     # clear_console()
@@ -531,6 +568,7 @@ def ejecutar_descompactar_facturas(host:str , port: int , username:str, password
     _logger_simple.info(f"**********************************************************************************************************************************")
     _logger.info(f"Iniciando el proceso de busqueda de facturas comprimidas en el sftp")
     _logger_simple.info(f"**********************************************************************************************************************************")
+    
     auth_url = os.getenv("AUTH_URL")
     username_sms = os.getenv("USERNAME_SMS")
     password_sms = os.getenv("PASSWORD_SMS")
@@ -540,7 +578,7 @@ def ejecutar_descompactar_facturas(host:str , port: int , username:str, password
     destinos = ["51368261","52888880"]
     if token:
         envio_sms(sms_url, token, mensaje_sms, destinos)
-    conteo_archivos = read_from_sftp(host, port, username, password)
+    conteo_archivos = read_from_sftp(host, port, username_sftp, password)
     lista_archivos_copiar = []
 
     if conteo_archivos is None:
@@ -558,10 +596,10 @@ def ejecutar_descompactar_facturas(host:str , port: int , username:str, password
 
     # Descargar archivos SOLO si conteo_archivos no es None
     if conteo_archivos is not None:
-        descargar_archivos_sftp(conteo_archivos, host, port, username, password, lista_archivos_copiar, direccion_destino_descarga)
+        descargar_archivos_sftp(conteo_archivos, host, port, username_sftp, password, lista_archivos_copiar, direccion_destino_descarga)
     else:
         _logger.warning("No se descargaron archivos del SFTP (conteo_archivos es None).")
 
     # Descomprimir y subir (aunque no haya archivos nuevos)
     carpeta_buscar = descomprimir_archivos(direccion_destino_descarga)
-    subir_carpeta_a_sftp(host, port, username, password, destino_descarga, carpeta_buscar)
+    subir_carpeta_a_sftp(host, port, username_sftp, password, destino_descarga, carpeta_buscar)

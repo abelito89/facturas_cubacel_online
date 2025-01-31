@@ -6,7 +6,7 @@ load_dotenv()
 
 host = os.getenv("IP_FTP")
 port = os.getenv("PORT")
-username = os.getenv("USER")
+username_sftp = os.getenv("USER_SFTP")
 password = os.getenv("PASSWORD")
 
-ejecutar_descompactar_facturas(host, int(port), username, password)
+ejecutar_descompactar_facturas(host, int(port), username_sftp, password)
