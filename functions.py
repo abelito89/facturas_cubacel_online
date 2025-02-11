@@ -14,6 +14,29 @@ from log_configuration import configurar_logging, configurar_separador
 load_dotenv()
 
 
+def fecha_mes_borrar() -> str:
+    """
+    Calcula y devuelve la fecha de hace 6 meses en formato 'YYYYMM'. 
+    Returns: 
+        str: Una cadena representando 6 meses atras en formato 'YYYYMM'.
+    """
+    # Obtener el mes y año actuales
+    ahora = datetime.now()
+    anho_actual = ahora.year
+    mes_actual = ahora.month
+    
+    # Calcular el mes y año del mes vencido
+    mes_borrar = mes_actual - 7
+    if mes_borrar <= 0:
+        mes_borrar += 12
+        anho_vencido = anho_actual - 1
+    else:
+        anho_vencido = anho_actual
+    fecha_borrar = str(anho_vencido)+str(mes_borrar).zfill(2)
+    return fecha_borrar
+
+
+
 def fecha_mes_vencido() -> str:
     """
     Calcula y devuelve la fecha del mes anterior en formato 'YYYYMM'. 
@@ -88,11 +111,9 @@ def cliente_sftp(host: str, port: int, username: str, password: str) -> Tuple[pa
             # Aquí puedes realizar las operaciones SFTP necesarias
             sftp.close()
             client.close()
-
     """
-    
     sftp = None
-    
+
     try:
         # Crear un cliente SSH
         client = paramiko.SSHClient()
@@ -125,9 +146,11 @@ def read_from_sftp(host: str, port: int, username: str, password: str) -> Conteo
 
     Returns:
         ConteoArchivos: Objeto que contiene listas de archivos .tar.gz, .zip y .rar.
-    """
-    _logger.info(f"ENTRANDO A READ FROM SFTP")
- 
+    """ 
+    _logger_simple.info(f"**********************************************************************************************************************************")
+    _logger.info(f"Iniciando el proceso de busqueda de facturas comprimidas en el sftp")
+    _logger_simple.info(f"**********************************************************************************************************************************")
+
     sftp, transport = cliente_sftp(host, port, username, password)
     if not sftp or not transport:
         return None
@@ -188,6 +211,95 @@ def filtrar_facturas_mes_vencido(conteo_archivos: ConteoArchivos) -> List[str]:
     return lista_archivos_copiar
 
 
+def eliminar_directorio(sftp, path):
+    try:
+        # Obtenemos el listado de archivos en el path
+        _logger.info(f"Eliminando facturas .pdf dentro del directorio para vaciarlo...")
+        for file_attr in sftp.listdir_attr(str(path)):
+            filename = file_attr.filename
+            dir_path = Path(path)
+            filepath = dir_path / filename
+            ruta_path = filepath.as_posix()
+            if filepath.suffix.lower() == '.pdf':
+                # Es un archivo PDF: lo eliminamos
+                sftp.remove(ruta_path)
+        # Después de vaciar el directorio, lo eliminamos
+        _logger.info(f"Directorio vaciado")
+        _logger.info(f"Procediendo a eliminacion del directorio")
+        sftp.rmdir(str(path))
+        _logger.info(f"Directorio eliminado: {path}")
+    except IOError as e:
+        _logger.error(f"Error al eliminar {path}: {e}")
+
+
+def borrar_carpeta_6_meses_antes (host, port, username, password) -> None:
+    """
+    Establece una conexión SSH al servidor SFTP y elimina recursivamente la carpeta de facturas correspondiente
+    a hace 6 meses en el servidor remoto.
+
+    La función realiza los siguientes pasos:
+    - Calcula la fecha correspondiente a hace 6 meses utilizando `fecha_mes_borrar()`.
+    - Establece una conexión SSH mediante `cliente_sftp` para ejecutar comandos en el servidor remoto.
+    - Construye el comando de borrado `rm -rf` para eliminar la carpeta y su contenido.
+    - Ejecuta el comando en el servidor remoto.
+    - Maneja y registra errores si ocurren durante la conexión o la ejecución del comando.
+    - Cierra las conexiones SFTP y SSH al finalizar.
+
+    Args:
+        host (str): Dirección IP o nombre del host del servidor SFTP.
+        port (int): Puerto para conectarse al servidor SFTP.
+        username (str): Nombre de usuario para la autenticación SSH.
+        password (str): Contraseña para la autenticación SSH.
+
+    Returns:
+        None: Esta función no devuelve ningún valor.
+
+    Logs:
+        - Info: Mensajes informativos sobre el progreso de la operación.
+        - Error: Mensajes de error si ocurre algún problema durante la conexión o eliminación.
+        - Debug: Salida del comando de borrado, si está disponible.
+
+    Raises:
+        Exception: Registra cualquier excepción ocurrida durante el proceso.
+
+    Ejemplo de uso:
+        borrar_carpeta_6_meses_antes('sftp.ejemplo.com', 22, 'usuario', 'contraseña')
+    """
+    _logger_simple.info(f"**********************************************************************************************************************************")
+    _logger.info(f"Iniciando el proceso de busqueda y borrado de facturas con mas de 6 meses.")
+    _logger_simple.info(f"**********************************************************************************************************************************")
+
+    sftp = None
+    client = None
+    fecha_borrar = fecha_mes_borrar()
+    path_carpeta_borrar = f"./{fecha_borrar}"
+    try:
+        _logger.info(f"Estableciendo conexion ssh con el SFTP para el borrado de las facturas de hace 6 meses")
+        sftp, client = cliente_sftp(host, port, username, password)
+        if client is None:
+            _logger.error(f"No se pudo establecer la conexion ssh")
+            return
+        
+        try:
+            sftp.stat(path_carpeta_borrar)
+            existencia_carpeta = True
+        except IOError:
+            existencia_carpeta = False
+        if existencia_carpeta:
+            _logger.info(f"Carpeta {path_carpeta_borrar} encontrada")
+            eliminar_directorio(sftp, Path(path_carpeta_borrar))
+        else:
+            _logger.warning(f"No existe la carpeta {path_carpeta_borrar} en el SFTP")
+            _logger.info(f"Cerrando conexion luego de verificar que no existe la carpeta de facturas de hace 6 meses")
+        
+    except Exception as e:
+        _logger.error(f"Error al intentar borrar la carpeta de facturas de hace 6 meses ({path_carpeta_borrar}): {e}")
+    finally:
+        if sftp:
+            sftp.close()
+        if client:
+            client.close()
+        
 
 def descargar_archivos_sftp(conteo_archivos: ConteoArchivos, host: str, port: int, username: str, password: str, lista_archivos_copiar: List[str], destino: str) -> None:
 
@@ -255,7 +367,7 @@ def descomprimir_zip(file_path: Path, output_dir: Path) -> None:
             # Verificar si todos los archivos ya están descomprimidos
             all_files_exist = all((output_dir / member).exists() for member in zip_ref.namelist())
             if all_files_exist:
-                _logger.info(f"El archivo ZIP: {file_path} ya estaba descomprimido en esa ubicacion")
+                _logger.warning(f"El archivo ZIP: {file_path} ya estaba descomprimido en esa ubicacion")
                 return  # Salir sin extraer nada
 
             # Extraer los archivos si no están descomprimidos
@@ -282,7 +394,7 @@ def descomprimir_rar(file_path: Path, output_dir: Path) -> None:
             # Verificar si todos los archivos ya están descomprimidos
             all_files_exist = all((output_dir / member).exists() for member in rar_ref.getnames())
             if all_files_exist:
-                _logger.info(f"El archivo RAR: {file_path} ya esta descomprimido")
+                _logger.warning(f"El archivo RAR: {file_path} ya esta descomprimido")
                 return  # Salir sin extraer nada
 
             # Extraer los archivos si no están descomprimidos
@@ -309,7 +421,7 @@ def descomprimir_tar_gz(file_path: Path, output_dir: Path) -> None:
             # Verificar si todos los archivos ya están descomprimidos
             all_files_exist = all((output_dir / member).exists() for member in tar_ref.getnames())
             if all_files_exist:
-                _logger.info(f"El archivo TAR.GZ: {file_path} ya esta descomprimido")
+                _logger.warning(f"El archivo TAR.GZ: {file_path} ya esta descomprimido")
                 return  # Salir sin extraer nada
 
             # Extraer los archivos si no están descomprimidos
@@ -564,11 +676,6 @@ def ejecutar_descompactar_facturas(host:str , port: int , username_sftp:str, pas
     """
     # Llamar a la configuración global
     # clear_console()
-
-    _logger_simple.info(f"**********************************************************************************************************************************")
-    _logger.info(f"Iniciando el proceso de busqueda de facturas comprimidas en el sftp")
-    _logger_simple.info(f"**********************************************************************************************************************************")
-    
     auth_url = os.getenv("AUTH_URL")
     username_sms = os.getenv("USERNAME_SMS")
     password_sms = os.getenv("PASSWORD_SMS")
@@ -578,6 +685,7 @@ def ejecutar_descompactar_facturas(host:str , port: int , username_sftp:str, pas
     destinos = ["51368261","52888880"]
     if token:
         envio_sms(sms_url, token, mensaje_sms, destinos)
+    borrar_carpeta_6_meses_antes(host, port, username_sftp, password)
     conteo_archivos = read_from_sftp(host, port, username_sftp, password)
     lista_archivos_copiar = []
 
